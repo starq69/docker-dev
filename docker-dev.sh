@@ -48,24 +48,6 @@ ask_to_proceed() {
   fi
 }
 
-check_dir() {
-  #
-  # TODO is_writable_dir()
-  #
-  local project_dir="$1"
-
-  if [[ ! -d "$project_dir" ]]; then
-    #echo "ERRORE: Invalid path [ $project_dir ]"
-    return 1
-  fi
-
-  if [[ ! -w "$project_dir" ]]; then
-    echo "[init] WARNING: Current user does not have write permission to $project_dir"
-    return 1
-  fi
-
-  return 0
-}
 
 validate_project() {
   local project="$1"
@@ -102,36 +84,6 @@ validate_org() {
 
 }
 
-__is_valid_target() {
-    local input="$1"
-
-    # Condition 1: Only allow a-zA-Z0-9-_\. characters
-    if [[ ! "$input" =~ ^[a-zA-Z0-9._/-]+$ ]]; then
-	echo "Condition 1 fail"
-        return 1
-    fi
-
-    # Condition 2: Can't contain two consecutive dots or slashes
-    if [[ "$input" =~ \.\. ]] || [[ "$input" =~ //// ]]; then
-	echo "Condition 2 fail"
-        return 1
-    fi
-
-    # Condition 3: Can't contain the sequence '\.'
-    if [[ "$input" =~ \/\. ]]; then
-	echo "Condition 3 fail"
-        return 1
-    fi
-
-    # Condition 4: Can't begin or end with a dot or slash
-    if [[ "$input" =~ ^[.//] ]] || [[ "$input" =~ [.//]$ ]]; then
-	echo "Condition 4 fail"
-        return 1
-    fi
-
-    return 0
-}
-
 is_valid() {
 
     local _tag="[is_valid]"
@@ -166,19 +118,26 @@ is_valid() {
     return 0
 }
 
+check_dir() {
+  local _tag="[check_dir]"
+  local _dir="$1"
+  if [[ ! -d "$_dir" ]]; then
+    #echo "ERRORE: Invalid path [ $_dir ]"
+    return 1
+  fi
+  if [[ ! -w "$_dir" ]] || [[ ! -r "$_dir" ]]; then
+    echo "$_tag WARNING: Current user does not have read/write permission to $_dir"
+    return 1
+  fi
+  return 0
+}
+
 check() {
-  #
-  # TODO convert $1 in readlink ?
-  #
   local _tag="[check]"
   _resolved="$(readlink -f "$1")" 
 
-  #if [ -d "$1" ]; then
-  #if [ -d "$(readlink -f "$1")" ]; then
-  if [ -d "$_resolved" ]; then
-    #echo "$_tag $1 exist"
-    #if [ -r "$1" ] && [ -w "$1" ]; then
-    if [ -r "$_resolved" ] && [ -w "$_resolved" ]; then
+  if [[ -d "$_resolved" ]]; then
+    if [[ -r "$_resolved" ]] && [[ -w "$_resolved" ]]; then
       echo "$_tag $1 is valid"
       PROJECT_DIR="$_resolved"
       return 0
@@ -186,6 +145,7 @@ check() {
       echo "$_tag missing rw permission on $_resolved"
       return 1
     fi
+
   else
     #
     # TODO inglobare il controllo is_absolute in is_valid ?
@@ -200,12 +160,13 @@ check() {
     fi
 
     # check for invalid characters
-    #
+    # TODO controllare anche la presenza di almeno un separatore '/', necessario
+    #      ora il controllo e' sulla create_directory()
     if ! is_valid $1; then
       echo "$_tag $1 is NOT valid"
       exit 1
-    else
-      echo "$_tag $1 is valid"
+    #else
+    #  echo "$_tag $1 is valid"
     fi
 
     if ! create_directory "$1"; then
@@ -224,32 +185,34 @@ create_directory() {
   IFS=/ read -r -a components <<< "$dir"
 
   local A="${components[0]}"
-  local B="${dir#*/}"
+  local B=""
 
-  #echo "A=$A"
-  #echo "B=$B"
-  #if [ -z "$A" ]; then
-  #  echo "WARNING: Absolute path passed $dir"
-  #  return 1
-  #fi
+  # Only set B if there's a "/" in the path
+  #
+  if [[ "$dir" == */* ]]; then
+    B="${dir#*/}"
+  fi
 
   if [ ! -d "$BASE/$A" ]; then  # readlink ?
     P_TYPES=$(find "$BASE" -maxdepth 1 -mindepth 1 -type d -printf '%f\n')
-    echo "$_tag WARNING: $BASE/$A does not exist" >&2
+    #echo "$_tag WARNING: $BASE/$A does not exist" >&2
+    echo "$_tag WARNING: $A project type is NOT defined" >&2
     echo "$_tag Please select one of the following available project types:"
     echo "$P_TYPES"
     return 1
   fi
 
   if [ -n "$B" ]; then
-    # mkdir only if not exist
-    if [ ! -d "$(readlink -f "$BASE/$A/$B")" ]; then
+    if [ ! -d "$(readlink -f "$BASE/$A/$B")" ]; then  ### mkdir only if not exist
       echo "$_tag mkdir -p $BASE/$A/$B"
       #mkdir -p "$BASE/$A/$B"
     else
       echo "$_tag directory already exist"
     fi
     PROJECT_DIR="$BASE/$A/$B"
+  else
+    echo "$_tag WARNING: Missing project Name"
+    return 1
   fi
 
   return 0
@@ -268,30 +231,8 @@ is_absolute() {
 
 validate_org;
 
-# Extract --target= if present
-#for arg in "$@"; do
-#  case $arg in
-#    --target=*)
-#      _target="${arg#--target=}"
-#      echo "_target=$_target"
-#      if ! PROJECT_DIR=$(readlink -f "$_target"); then 
-#        echo "[init] WARNING Invalid path '$_target'" >&2
-#      fi
-#      if ! is_valid_target "$_target"; then
-#        echo "is_valid_target FAIL"
-#	exit 1
-#      fi
-#      PROJECT_DIR=$(readlink -f "${arg#--dir=}") || PROJECT_DIR="${arg#--dir=}"
-#      shift
-#      break
-#      ;;
-#  esac
-#done
-
-#echo "--dir: $PROJECT_DIR"
-
-
-# Extract --target= if present
+# Extract --target= mandatory argument or exit
+#
 for arg in "$@"; do
   case $arg in
     --target=*)
@@ -307,18 +248,12 @@ for arg in "$@"; do
 done
 
 if [ -z "${_target+x}" ]; then
-  echo "[init] missing --target ?"
+  echo "[init] missing --target argument"
   exit 1
 fi
 
-#while getopts ":d:i:c:v:" opt; do
 while getopts ":i:c:v:" opt; do
   case $opt in
-    #d)
-    #    if ! PROJECT_DIR=$(readlink -f "$OPTARG"); then
-    #      echo "[init] WARNING Invalid path '$OPTARG'" >&2
-    #	  PROJECT_DIR=$OPTARG
-    #    fi;;
     i) IMAGE_NAME=$OPTARG;;
     c) CONTAINER_NAME=$OPTARG;;
     v) VOLUME_NAME=$OPTARG;;
@@ -337,16 +272,16 @@ HOSTUSER="$(id -un)"    	# ${HOSTUSER:-$(id -un)}"
 UID_="${UID_:-$(id -u)}"
 GID_="${GID_:-$(id -g)}"
 
+
+if [ -z "${PROJECT_DIR+x}" ]; then
+  echo "[init] PROJECT_DIR IS NOT SET"
+  #exit 1
+fi
+
 PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
 
 # TEST
-validate_project $PROJECT_DIR;
-#exit 1
-
-#if ! check_dir "$PROJECT_DIR"; then
-#  echo "[init] ERROR: Invalid path passed with -d option [$PROJECT_DIR]"
-#  exit 1
-#fi
+#validate_project $PROJECT_DIR;
 
 # Split PROJECT_DIR into components
 IFS='/' read -r -a components <<< "$PROJECT_DIR"
@@ -383,7 +318,6 @@ fi
 IMAGE_NAME="${IMAGE_NAME:-${P_NAME}}"
 CONTAINER_NAME="${CONTAINER_NAME:-${P_TARGET}.${P_NAME}}"
 VOLUME_NAME="${VOLUME_NAME:-venv.${P_TARGET}.${P_NAME}}"
-
 
 echo "Image Name     : $IMAGE_NAME"
 echo "Container Name : $CONTAINER_NAME"
