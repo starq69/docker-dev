@@ -159,7 +159,7 @@ is_valid() {
         return 1
     fi
 
-    # Condition 2: Can't contain two consecutive dots or backslashes
+    # Condition 2: Can't contain two consecutive dots or slashes
     if [[ "$input" =~ \.\. ]] || [[ "$input" =~ //// ]]; then
 	echo "$_tag Condition 2 FAIL"
         return 1
@@ -171,7 +171,7 @@ is_valid() {
         return 1
     fi
 
-    # Condition 4: Can't begin or end with a dot or backslash
+    # Condition 4: Can't begin or end with a dot or slash
     if [[ "$input" =~ ^[.//] ]] || [[ "$input" =~ [.//]$ ]]; then
 	echo "$_tag Condition 4 FAIL"
         return 1

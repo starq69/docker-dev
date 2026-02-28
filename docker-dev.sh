@@ -94,11 +94,15 @@ validate_org() {
     BASE="$HOME/REP"
   fi
 
+  # TEMP....
+  BASE="$HOME/REP/DEV" # TODO 
+
   echo "ORG : $ORG"
   echo "BASE: $BASE"
+
 }
 
-is_valid_target() {
+__is_valid_target() {
     local input="$1"
 
     # Condition 1: Only allow a-zA-Z0-9-_\. characters
@@ -128,16 +132,148 @@ is_valid_target() {
     return 0
 }
 
+is_valid() {
+
+    local _tag="[is_valid]"
+    local input="$1"
+
+    #echo "$_tag [debug] $1"
+
+    # Condition 1: Only allow a-zA-Z0-9-_/. characters
+    if [[ ! "$input" =~ ^[a-zA-Z0-9._/-]+$ ]]; then
+        echo "$_tag Condition 1 FAIL"
+        return 1
+    fi
+
+    # Condition 2: Can't contain two consecutive dots or slashes
+    if [[ "$input" =~ \.\. ]] || [[ "$input" =~ // ]]; then
+        echo "$_tag Condition 2 FAIL"
+        return 1
+    fi
+
+    # Condition 3: Can't contain the sequence '/.'
+    if [[ "$input" =~ /\. ]]; then
+        echo "$_tag Condition 3 FAIL"
+        return 1
+    fi
+
+    # Condition 4: Can't begin or end with a dot or slash
+    if [[ "$input" =~ ^[./] ]] || [[ "$input" =~ [./]$ ]]; then
+        echo "$_tag Condition 4 FAIL"
+        return 1
+    fi
+
+    return 0
+}
+
+check() {
+  #
+  # TODO convert $1 in readlink ?
+  #
+  local _tag="[check]"
+  _resolved="$(readlink -f "$1")" 
+
+  #if [ -d "$1" ]; then
+  #if [ -d "$(readlink -f "$1")" ]; then
+  if [ -d "$_resolved" ]; then
+    #echo "$_tag $1 exist"
+    #if [ -r "$1" ] && [ -w "$1" ]; then
+    if [ -r "$_resolved" ] && [ -w "$_resolved" ]; then
+      echo "$_tag $1 is valid"
+      PROJECT_DIR="$_resolved"
+      return 0
+    else
+      echo "$_tag missing rw permission on $_resolved"
+      return 1
+    fi
+  else
+    #
+    # TODO inglobare il controllo is_absolute in is_valid ?
+    # fattibile ma si perde il msg informativo...
+    #
+    if is_absolute "$1"; then
+      echo "$_tag cannot create new absolute path $1"
+      echo "$_tag use relative path instead"
+      return 1
+    else
+      echo "$_tag relative path passed: $1"
+    fi
+
+    # check for invalid characters
+    #
+    if ! is_valid $1; then
+      echo "$_tag $1 is NOT valid"
+      exit 1
+    else
+      echo "$_tag $1 is valid"
+    fi
+
+    if ! create_directory "$1"; then
+      echo "$_tag Error creating $1" >&2
+      return 1
+    fi
+    return 0
+  fi
+}
+
+create_directory() {
+  local _tag="[create_directory]"
+  local dir="$1"
+  local path="$BASE"
+
+  IFS=/ read -r -a components <<< "$dir"
+
+  local A="${components[0]}"
+  local B="${dir#*/}"
+
+  #echo "A=$A"
+  #echo "B=$B"
+  #if [ -z "$A" ]; then
+  #  echo "WARNING: Absolute path passed $dir"
+  #  return 1
+  #fi
+
+  if [ ! -d "$BASE/$A" ]; then  # readlink ?
+    P_TYPES=$(find "$BASE" -maxdepth 1 -mindepth 1 -type d -printf '%f\n')
+    echo "$_tag WARNING: $BASE/$A does not exist" >&2
+    echo "$_tag Please select one of the following available project types:"
+    echo "$P_TYPES"
+    return 1
+  fi
+
+  if [ -n "$B" ]; then
+    # mkdir only if not exist
+    if [ ! -d "$(readlink -f "$BASE/$A/$B")" ]; then
+      echo "$_tag mkdir -p $BASE/$A/$B"
+      #mkdir -p "$BASE/$A/$B"
+    else
+      echo "$_tag directory already exist"
+    fi
+    PROJECT_DIR="$BASE/$A/$B"
+  fi
+
+  return 0
+}
+
+is_absolute() {
+  local _tag="[is_absolute]"
+  if [[ "$1" =~ ^/ ]]; then
+    echo "$_tag test : absolute path?"
+    return 0
+  fi
+    echo "$_tag test: relative path?"
+    return 1
+}
 ##################################################################################################
 
 validate_org;
 
-# Extract --dir= if present
+# Extract --target= if present
 #for arg in "$@"; do
 #  case $arg in
-#    --dir=*)
-#      _target="${arg#--dir=}"
-#      echo "_taret=$_target"
+#    --target=*)
+#      _target="${arg#--target=}"
+#      echo "_target=$_target"
 #      if ! PROJECT_DIR=$(readlink -f "$_target"); then 
 #        echo "[init] WARNING Invalid path '$_target'" >&2
 #      fi
@@ -154,15 +290,35 @@ validate_org;
 
 #echo "--dir: $PROJECT_DIR"
 
-while getopts ":d:i:c:v:" opt; do
+
+# Extract --target= if present
+for arg in "$@"; do
+  case $arg in
+    --target=*)
+      _target="${arg#--target=}"
+      if ! check "$_target"; then
+        echo "invalid argument -d $_target"
+        exit 1
+      fi
+      shift
+      break
+      ;;
+  esac
+done
+
+if [ -z "${_target+x}" ]; then
+  echo "[init] missing --target ?"
+  exit 1
+fi
+
+#while getopts ":d:i:c:v:" opt; do
+while getopts ":i:c:v:" opt; do
   case $opt in
-    #d) PROJECT_DIR=$OPTARG;;
-    #d) PROJECT_DIR=$(readlink -f "$OPTARG");;
-    d)
-        if ! PROJECT_DIR=$(readlink -f "$OPTARG"); then
-          echo "[init] WARNING Invalid path '$OPTARG'" >&2
-	  PROJECT_DIR=$OPTARG
-        fi;;
+    #d)
+    #    if ! PROJECT_DIR=$(readlink -f "$OPTARG"); then
+    #      echo "[init] WARNING Invalid path '$OPTARG'" >&2
+    #	  PROJECT_DIR=$OPTARG
+    #    fi;;
     i) IMAGE_NAME=$OPTARG;;
     c) CONTAINER_NAME=$OPTARG;;
     v) VOLUME_NAME=$OPTARG;;
