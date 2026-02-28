@@ -3,6 +3,7 @@ set -euo pipefail
 
 
 create_directory() {
+  local _tag="[create_directory]"
   local dir="$1"
   local path="$BASE"
 
@@ -20,8 +21,8 @@ create_directory() {
 
   if [ ! -d "$BASE/$A" ]; then  # readlink ?
     P_TYPES=$(find "$BASE" -maxdepth 1 -mindepth 1 -type d -printf '%f\n')
-    echo "WARNING: $BASE/$A does not exist" >&2
-    echo "Please select one of the following available project types:"
+    echo "$_tag WARNING: $BASE/$A does not exist" >&2
+    echo "$_tag Please select one of the following available project types:"
     echo "$P_TYPES"
     return 1
   fi
@@ -29,10 +30,10 @@ create_directory() {
   if [ -n "$B" ]; then
     # mkdir only if not exist 
     if [ ! -d "$(readlink -f "$BASE/$A/$B")" ]; then
-      echo ":mkdir -p $BASE/$A/$B"
+      echo "$_tag mkdir -p $BASE/$A/$B"
       #mkdir -p "$BASE/$A/$B"
     else
-      echo "directory already exist"
+      echo "$_tag directory already exist"
     fi
     PROJECT_DIR="$BASE/$A/$B"
   fi
@@ -41,77 +42,138 @@ create_directory() {
 }
 
 is_absolute() {
-
+  local _tag="[is_absolute]"
   if [[ "$1" =~ ^/ ]]; then
-    echo "test : absolute path?"
+    echo "$_tag test : absolute path?"
     return 0
   fi
-    echo "test: relative path?"
+    echo "$_tag test: relative path?"
     return 1
 }
 
 check() {
+  #
+  # TODO convert $1 in readlink ?
+  #
+  local _tag="[check]"
+  _resolved="$(readlink -f "$1")" # NEW
+
   #if [ -d "$1" ]; then
-  if [ -d "$(readlink -f "$1")" ]; then
-    #echo "$1 exist"
-    if [ -r "$1" ] && [ -w "$1" ]; then
-      echo "$1 is valid"
-      PROJECT_DIR="$1"
+  #if [ -d "$(readlink -f "$1")" ]; then
+  if [ -d "$_resolved" ]; then
+    #echo "$_tag $1 exist"
+    #if [ -r "$1" ] && [ -w "$1" ]; then
+    if [ -r "$_resolved" ] && [ -w "$_resolved" ]; then
+      echo "$_tag $1 is valid"
+      PROJECT_DIR="$_resolved" 
       return 0
     else
-      echo "missing rw permission on $1"
+      echo "$_tag missing rw permission on $_resolved"
       return 1
     fi
   else
-    if is_absolute "$1"; then
-      echo "cannot create new absolute path $1"
-      echo "use relative path instead"  
+    #
+    # TODO inglobare il controllo is_absolute in is_valid ?
+    # fattibile ma si perde il msg informativo...
+    #
+    if is_absolute "$1"; then   
+      echo "$_tag cannot create new absolute path $1"
+      echo "$_tag use relative path instead"  
       return 1
     else
-      echo "relative path passed: $1"
+      echo "$_tag relative path passed: $1"
     fi
 
     # check for invalid characters 
     #
     if ! is_valid $1; then
-      echo "$1 is NOT valid"
+      echo "$_tag $1 is NOT valid"
       exit 1
     else
-      echo "$1 is valid"
+      echo "$_tag $1 is valid"
     fi
 
     if ! create_directory "$1"; then
-      echo "Error creating $1" >&2
+      echo "$_tag Error creating $1" >&2
       return 1
     fi
     return 0
   fi
 }
 
+__check() {
+  local _tag="[check]"
+  local _resolved
+
+  # Resolve symlinks 
+  #_resolved="$(readlink -f "$1")" || {
+  #  echo "$_tag cannot resolve path: $1" >&2
+  #  return 1
+  #}
+
+  _resolved="$(readlink -m "$1")" 
+  echo "$_tag resolved: $_resolved"
+
+  if [ -d "$_resolved" ]; then
+    if [ -r "$_resolved" ] && [ -w "$_resolved" ]; then
+      echo "$_tag $1 is valid"
+      PROJECT_DIR="$_resolved"  # Store the resolved path
+      return 0
+    else
+      echo "$_tag missing rw permission on $1"
+      return 1
+    fi
+  else
+    if is_absolute "$_resolved"; then
+      echo "$_tag cannot create new absolute path $1"
+      echo "$_tag use relative path instead"
+      return 1
+    else
+      echo "$_tag relative path passed: $_resolved"
+    fi
+
+    if ! is_valid "$_resolved"; then
+      echo "$_tag $_resolved is NOT valid" >&2
+      return 1  
+    fi
+
+    if ! create_directory "$_resolved"; then
+      echo "$_tag Error creating $_resolved" >&2
+      return 1
+    fi
+
+    PROJECT_DIR="$_resolved"
+    return 0
+  fi
+}
+
+
 is_valid() {
+
+    local _tag="[is_valid]"
     local input="$1"
 
     # Condition 1: Only allow a-zA-Z0-9-_/. characters
     if [[ ! "$input" =~ ^[a-zA-Z0-9._/-]+$ ]]; then
-	echo "Condition 1 FAIL"
+	echo "$_tag Condition 1 FAIL"
         return 1
     fi
 
     # Condition 2: Can't contain two consecutive dots or backslashes
     if [[ "$input" =~ \.\. ]] || [[ "$input" =~ //// ]]; then
-	echo "Condition 2 FAIL"
+	echo "$_tag Condition 2 FAIL"
         return 1
     fi
 
     # Condition 3: Can't contain the sequence '/.'
     if [[ "$input" =~ //. ]]; then
-	echo "Condition 3 FAIL"
+	echo "$_tag Condition 3 FAIL"
         return 1
     fi
 
     # Condition 4: Can't begin or end with a dot or backslash
     if [[ "$input" =~ ^[.//] ]] || [[ "$input" =~ [.//]$ ]]; then
-	echo "Condition 4 FAIL"
+	echo "$_tag Condition 4 FAIL"
         return 1
     fi
 

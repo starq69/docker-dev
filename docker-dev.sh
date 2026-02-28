@@ -61,7 +61,6 @@ check_dir() {
 
   if [[ ! -w "$project_dir" ]]; then
     echo "[init] WARNING: Current user does not have write permission to $project_dir"
-    #echo "Please ensure that the current user has write permission or run the script as a user with write permission."
     return 1
   fi
 
@@ -99,9 +98,61 @@ validate_org() {
   echo "BASE: $BASE"
 }
 
+is_valid_target() {
+    local input="$1"
+
+    # Condition 1: Only allow a-zA-Z0-9-_\. characters
+    if [[ ! "$input" =~ ^[a-zA-Z0-9._/-]+$ ]]; then
+	echo "Condition 1 fail"
+        return 1
+    fi
+
+    # Condition 2: Can't contain two consecutive dots or slashes
+    if [[ "$input" =~ \.\. ]] || [[ "$input" =~ //// ]]; then
+	echo "Condition 2 fail"
+        return 1
+    fi
+
+    # Condition 3: Can't contain the sequence '\.'
+    if [[ "$input" =~ \/\. ]]; then
+	echo "Condition 3 fail"
+        return 1
+    fi
+
+    # Condition 4: Can't begin or end with a dot or slash
+    if [[ "$input" =~ ^[.//] ]] || [[ "$input" =~ [.//]$ ]]; then
+	echo "Condition 4 fail"
+        return 1
+    fi
+
+    return 0
+}
+
 ##################################################################################################
 
 validate_org;
+
+# Extract --dir= if present
+#for arg in "$@"; do
+#  case $arg in
+#    --dir=*)
+#      _target="${arg#--dir=}"
+#      echo "_taret=$_target"
+#      if ! PROJECT_DIR=$(readlink -f "$_target"); then 
+#        echo "[init] WARNING Invalid path '$_target'" >&2
+#      fi
+#      if ! is_valid_target "$_target"; then
+#        echo "is_valid_target FAIL"
+#	exit 1
+#      fi
+#      PROJECT_DIR=$(readlink -f "${arg#--dir=}") || PROJECT_DIR="${arg#--dir=}"
+#      shift
+#      break
+#      ;;
+#  esac
+#done
+
+#echo "--dir: $PROJECT_DIR"
 
 while getopts ":d:i:c:v:" opt; do
   case $opt in
@@ -134,12 +185,12 @@ PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
 
 # TEST
 validate_project $PROJECT_DIR;
-exit 1
+#exit 1
 
-if ! check_dir "$PROJECT_DIR"; then
-  echo "[init] ERROR: Invalid path passed with -d option [$PROJECT_DIR]"
-  exit 1
-fi
+#if ! check_dir "$PROJECT_DIR"; then
+#  echo "[init] ERROR: Invalid path passed with -d option [$PROJECT_DIR]"
+#  exit 1
+#fi
 
 # Split PROJECT_DIR into components
 IFS='/' read -r -a components <<< "$PROJECT_DIR"
