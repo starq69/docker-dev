@@ -49,6 +49,9 @@ ask_to_proceed() {
 }
 
 check_dir() {
+  #
+  # TODO is_writable_dir()
+  #
   local project_dir="$1"
 
   if [[ ! -d "$project_dir" ]]; then
@@ -65,6 +68,16 @@ check_dir() {
   return 0
 }
 
+validate_project() {
+  local project="$1"
+  echo "[init] validate_project: $project"
+  if ! check_dir $project; then
+    echo "[init] WARNING: Match $project into $BASE ..."
+  else
+    echo "[init] existent project: $project"
+  fi
+}
+
 validate_org() {
   if [ -z "${ORG+x}" ]; then
     # ORG is NOT set
@@ -74,11 +87,6 @@ validate_org() {
   else
     # ORG is set
     BASE="$ORG/REP"
-    #if ! check_dir $BASE; then
-    #  echo "[init] ERROR: Invalid ORG=$ORG, fallback to $HOME"
-    #  ORG="$HOME"
-    #  BASE="$HOME/REP"
-    #fi
   fi
 
   if ! check_dir $BASE; then
@@ -97,7 +105,13 @@ validate_org;
 
 while getopts ":d:i:c:v:" opt; do
   case $opt in
-    d) PROJECT_DIR=$OPTARG;;
+    #d) PROJECT_DIR=$OPTARG;;
+    #d) PROJECT_DIR=$(readlink -f "$OPTARG");;
+    d)
+        if ! PROJECT_DIR=$(readlink -f "$OPTARG"); then
+          echo "[init] WARNING Invalid path '$OPTARG'" >&2
+	  PROJECT_DIR=$OPTARG
+        fi;;
     i) IMAGE_NAME=$OPTARG;;
     c) CONTAINER_NAME=$OPTARG;;
     v) VOLUME_NAME=$OPTARG;;
@@ -109,7 +123,7 @@ shift $((OPTIND-1))
 
 CONTAINER_CMD=("$@")
 ONE_LINE_CONTAINER_CMD=$(printf "%s " "${CONTAINER_CMD[@]}")
-echo "NON-Options arguments: (container command) : < $ONE_LINE_CONTAINER_CMD>"
+echo "NON-Options arguments (container command): $ONE_LINE_CONTAINER_CMD"
 
 TZ="${TZ:-Europe/Rome}"
 HOSTUSER="$(id -un)"    	# ${HOSTUSER:-$(id -un)}"
@@ -117,6 +131,10 @@ UID_="${UID_:-$(id -u)}"
 GID_="${GID_:-$(id -g)}"
 
 PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
+
+# TEST
+validate_project $PROJECT_DIR;
+exit 1
 
 if ! check_dir "$PROJECT_DIR"; then
   echo "[init] ERROR: Invalid path passed with -d option [$PROJECT_DIR]"
