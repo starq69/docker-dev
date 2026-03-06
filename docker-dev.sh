@@ -238,7 +238,7 @@ for arg in "$@"; do
     --target=*)
       _target="${arg#--target=}"
       if ! check "$_target"; then
-        echo "invalid argument -d $_target"
+        echo "invalid argument --target=$_target"
         exit 1
       fi
       shift
