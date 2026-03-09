@@ -1,30 +1,42 @@
 # -------------------------------------------------
-# Dockerfile.pytest-01
+# Dockerfile.Python
 #
-# PASSED:
+# PASSED
 #
-# crea il volume...
+# [ build.sh ]
 #
-# docker volume create venv-final-02
-#
-# permessi utente sul volume... (starq user)
-#
-# docker run --rm -it -v venv-final-02:/app/.venv alpine ash -c "chown 1000:1000 /app/.venv" 
-#
-# docker build...
-#
-# docker build --build-arg HOSTUSER=starq --build-arg UID=$(id -u starq) --build-arg GID=$(id -g starq) -t final-02 -f Dockerfile . 
-#
-# docker run...
-#
-# docker run -d -p 8000:8000 -v "$PWD:/app" -v venv-final-02:/app/.venv -e UV_SYNC_ALWAYS=0 --name test-final-02 final-02
-# oppure (vedere anche entrypoint.sh):
-# docker run -d -p 8000:8000 -v "$PWD:/app" -v venv-final-02:/app/.venv -e UV_SYNC_ALWAYS=0 --name test-final-02 final-02 uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
-#
-# docker logs -f test-final-02
-# docker logs -f test-final-02 &
-# docker logs --tail 100 test-final-02
-# docker exec -it test-final-02 tail -f /dev/stdout
+# HOSTUSER=$USER
+# _UID="$(id -u $USER)"
+# _GID="$(id -g $USER)"
+# APP_DIR="/app"
+# VENV_DIR="${APP_DIR}/.venv"
+
+# docker build --build-arg HOSTUSER=$HOSTUSER --build-arg UID=$_UID --build-arg GID=$_GID -t pytest-01 -f Dockerfile .
+# echo "docker image [ pytest-01 ] done..."
+
+# echo "virtual env volume:"
+# docker volume create venv-pytest-01
+# docker run --rm -it -v venv-pytest-01:${VENV_DIR} alpine ash -c "chown $_UID:$_GID ${VENV_DIR}" # permessi utente
+# echo "docker volume [ venv-pytest-01 ] done."
+
+# echo "python interpreter volume:"
+# docker volume create uv-python
+# docker run --rm -it -v uv-python:/uvpy alpine ash -c "chown $_UID:$_GID /uvpy" # permessi utente
+# echo "docker volume [ uv-python ] done."
+
+# docker run --rm -it -p 8000:8000 \
+#	 --name test-myproject \
+#        -v $(pwd):/app \
+#        -v venv-myproject:/app/.venv \
+#        -v uv-python:/home/starq/.local/share/uv/python \
+#        -e UV_SYNC_ALWAYS=0 \
+#        myproject \
+#        bash
+
+# docker logs -f test-myproject
+# docker logs -f test-myproject &
+# docker logs --tail 100 test-myproject
+# docker exec -it test-myproject tail -f /dev/stdout
 # -------------------------------------------------
 FROM debian:trixie-slim
 
