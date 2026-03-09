@@ -42,7 +42,24 @@ else
         #ls -ld $VENV_DIR
 	#echo "segue uv sync..."
 
-	uv sync
+	if [ ! -f "pyproject.toml" ]; then  # (nuovo progetto)
+	    echo "[entrypoint] This is a new project"
+	    echo "[entrypoint] uv init"
+	    uv init
+	    echo "[entrypoint] uv sync"
+	    uv sync
+	elif [ ! -f "uv.lock" ]; then
+	    echo "[entrypoint] missing uv.lock"
+	    echo "[entrypoint] uv lock"
+	    uv lock
+	else
+	    if ! uv lock --check; then
+		echo "[entrypoint] misaligned uv lock"
+		echo "[entrypoint] uv lock"
+		uv lock
+	    fi
+	    uv sync
+	fi
 
     elif [ "$ret" -eq 2 ]; then
         echo "[entrypoint] WARNING: missing $VENV_DIR volume mount, check 'docker run' command and try again..."

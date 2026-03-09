@@ -391,27 +391,27 @@ cd "$PROJECT_DIR"
 # ---- Step 1: uv init (only if needed) ----
 #
 
-if [ ! -f "pyproject.toml" ]; then
-  echo "[init] Missing pyproject.toml -> uv init"
-  uv init
-else
-  echo "[init] pyproject.toml already present -> skip uv init"
-fi
+#if [ ! -f "pyproject.toml" ]; then
+#  echo "[init] Missing pyproject.toml -> uv init"
+#  uv init
+#else
+#  echo "[init] pyproject.toml already present -> skip uv init"
+#fi
 
 # ---- Step 2: uv lock (create if missing, refresh if needed) ----
 #
-if [ ! -f "uv.lock" ]; then
-  echo "[init] Missing uv.lock -> uv lock"
-  uv lock
-else
-  echo "[init] Controllo allineamento uv.lock -> uv lock --check"
-  if ! uv lock --check; then
-    echo "[init] uv.lock non allineato -> uv lock (rigenero)"
-    uv lock
-  else
-    echo "[init] uv.lock ok -> skip"
-  fi
-fi
+# if [ ! -f "uv.lock" ]; then
+#   echo "[init] Missing uv.lock -> uv lock"
+#   uv lock
+# else
+#   echo "[init] Controllo allineamento uv.lock -> uv lock --check"
+#   if ! uv lock --check; then
+#     echo "[init] uv.lock non allineato -> uv lock (rigenero)"
+#     uv lock
+#   else
+#     echo "[init] uv.lock ok -> skip"
+#   fi
+# fi
 
 # ---- Step 3: create volume (idempotent) ----
 #
