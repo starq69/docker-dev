@@ -413,20 +413,30 @@ cd "$PROJECT_DIR"
 #   fi
 # fi
 
-# ---- Step 3: create volume (idempotent) ----
+# ---- Step 3.1: create venv volume (idempotent) 
 #
-echo "[init] Creo (o riuso) volume: ${VOLUME_NAME}"
+echo "[init] Activate docker volume ${VOLUME_NAME}"
 docker volume create "${VOLUME_NAME}" >/dev/null
 
-# ---- Step 3b: init-volume-chown (make volume writable by host UID/GID) ----
+# ---- Step 3.1b: init-volume-chown (make volume writable by host UID/GID)
 #
-echo "[init] Inizializzo permessi volume ${VOLUME_NAME} -> chown ${UID_}:${GID_}"
 docker run --rm \
-  -v "${VOLUME_NAME}:${APP_DIR_IN_CONTAINER}" \
-  alpine:3.20 \
-  sh -c "mkdir -p ${APP_DIR_IN_CONTAINER} && chown -R ${UID_}:${GID_} ${APP_DIR_IN_CONTAINER}" >/dev/null
+	-v "${VOLUME_NAME}:${APP_DIR_IN_CONTAINER}" \
+	alpine:3.20 \
+	sh -c "mkdir -p ${APP_DIR_IN_CONTAINER} && chown -R ${UID_}:${GID_} ${APP_DIR_IN_CONTAINER}" >/dev/null
 
-#exit 0
+# ---- Step 3.2: create uv-python volume (idempotent)
+#
+echo "[init] Activate docker volume uv-python"
+docker volume create uv-python >/dev/null
+
+# ---- Step 3.2b: make volume writable by host UID/GID
+#
+docker run --rm \
+	-v uv-python:/uvpy \
+	alpine:3.20 \
+       	ash -c "chown $UID_:$GID_ /uvpy"
+
 
 echo "[ $(pwd)/Dockerfile ]"
 
@@ -463,6 +473,7 @@ if [ "${#CONTAINER_CMD[@]}" -gt 0 ]; then
     --name "${CONTAINER_NAME}" \
     -v "${PROJECT_DIR}:${APP_DIR_IN_CONTAINER}" \
     -v "${VOLUME_NAME}:${VENV_DIR_IN_CONTAINER}" \
+    -v uv-python:/home/$HOSTUSER/.local/share/uv/python \ # TODO UV_PYTHON_DIR
     ${DOCKER_RUN_EXTRA_ARGS} \
     "${IMAGE_NAME}" \
     "${CONTAINER_CMD[@]}"
@@ -473,6 +484,7 @@ else
     --name "${CONTAINER_NAME}" \
     -v "${PROJECT_DIR}:${APP_DIR_IN_CONTAINER}" \
     -v "${VOLUME_NAME}:${VENV_DIR_IN_CONTAINER}" \
+    -v uv-python:/home/$HOSTUSER/.local/share/uv/python \ # TODO UV_PYTHON_DIR
     ${DOCKER_RUN_EXTRA_ARGS} \
     "${IMAGE_NAME}"
 fi
