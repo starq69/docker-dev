@@ -205,7 +205,7 @@ create_directory() {
   if [ -n "$B" ]; then
     if [ ! -d "$(readlink -f "$BASE/$A/$B")" ]; then  ### mkdir only if not exist
       echo "$_tag mkdir -p $BASE/$A/$B"
-      #mkdir -p "$BASE/$A/$B"
+      mkdir -p "$BASE/$A/$B"
     else
       echo "$_tag directory already exist"
     fi
@@ -370,7 +370,7 @@ DOCKERFILE=Dockerfile.$P_TYPE
 if [[ -f $DOCKERFILE ]]; then
   #echo "$DOCKERFILE --> ok"
   #echo "copio in $PROJECT_DIR ..."
-  cp $DOCKERFILE $PROJECT_DIR
+  cp $DOCKERFILE $PROJECT_DIR/
   DOCKERFILE="$PROJECT_DIR/Dockerfile.${P_TYPE}" ### !!!
   echo "...Dockerfile --> $DOCKERFILE"
 fi
@@ -380,7 +380,7 @@ echo "WARNING: COPIO DIRETTAMENTE entrypoint.sh..."
 ENTRYPOINT=entrypoint.Python.sh
 if [[ -f $ENTRYPOINT ]]; then
   #echo "$ENTRYPOINT --> ok"
-  cp $ENTRYPOINT $PROJECT_DIR
+  cp $ENTRYPOINT $PROJECT_DIR/
   ENTRYPOINT="$PROJECT_DIR/entrypoint.${P_TYPE}.sh"
   echo "...entrypoint --> $ENTRYPOINT"
 fi
@@ -458,7 +458,8 @@ fi
 echo "[init] Avvio container: ${CONTAINER_NAME}"
 if [ "${#CONTAINER_CMD[@]}" -gt 0 ]; then
   echo "[init] run container with arguments: < $ONE_LINE_CONTAINER_CMD>"
-  docker run --rm -it \
+  #docker run --rm -it \
+  docker run -it \
     --name "${CONTAINER_NAME}" \
     -v "${PROJECT_DIR}:${APP_DIR_IN_CONTAINER}" \
     -v "${VOLUME_NAME}:${VENV_DIR_IN_CONTAINER}" \
@@ -467,7 +468,8 @@ if [ "${#CONTAINER_CMD[@]}" -gt 0 ]; then
     "${CONTAINER_CMD[@]}"
 else
   echo "[init] run container with NO arguments"
-  docker run --rm -it \
+  #docker run --rm -it \
+  docker run -it \
     --name "${CONTAINER_NAME}" \
     -v "${PROJECT_DIR}:${APP_DIR_IN_CONTAINER}" \
     -v "${VOLUME_NAME}:${VENV_DIR_IN_CONTAINER}" \

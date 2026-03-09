@@ -61,7 +61,7 @@ RUN groupadd -g ${GID} ${HOSTUSER} && \
     rm -rf /var/lib/apt/lists/*
 
 
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY entrypoint.Python.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 USER ${HOSTUSER}
@@ -70,5 +70,5 @@ ENV PATH="${APP_DIR}/.venv/bin:$PATH"
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+#CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
