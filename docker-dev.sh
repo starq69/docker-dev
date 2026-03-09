@@ -348,34 +348,7 @@ if ! ask_to_proceed; then
   exit 1
 fi
 
-echo "WARNING: COPIO DIRETTAMENTE Dockerfile.Python..."
-
-DOCKERFILE=~/.local/share/docker-dev/Dockerfile.$P_TYPE
-if [[ -f $DOCKERFILE ]]; then
-  #echo "$DOCKERFILE --> ok"
-  #echo "copio in $PROJECT_DIR ..."
-  cp $DOCKERFILE $PROJECT_DIR
-  DOCKERFILE="$PROJECT_DIR/Dockerfile.$P_TYPE" ### !!!
-  echo "...Dockerfile --> $DOCKERFILE"
-fi
-
-echo "WARNING: COPIO DIRETTAMENTE entrypoint.sh..."
-ENTRYPOINT=~/.local/share/docker-dev/entrypoint.sh
-if [[ -f $ENTRYPOINT ]]; then
-  #echo "$ENTRYPOINT --> ok"
-  cp $ENTRYPOINT $PROJECT_DIR
-  ENTRYPOINT="$PROJECT_DIR/entrypoint.sh"
-  echo "...entrypoint --> $ENTRYPOINT"
-fi
-
-command -v docker >/dev/null 2>&1 || { echo "Errore: 'docker' non trovato nel PATH dell'host."; exit 1; }
-echo "docker found..."
-command -v uv >/dev/null 2>&1 || { echo "Errore: 'uv' non trovato nel PATH dell'host."; exit 1; }
-echo "uv found..."
-
-cd "$PROJECT_DIR"
-
-# ---- Step 1: uv init (only if needed) ----
+# check Project type
 #
 echo "project type=<$P_TYPE>"
 if [[ "$P_TYPE" != "Python" ]]; then
@@ -383,6 +356,40 @@ if [[ "$P_TYPE" != "Python" ]]; then
   exit 1
 fi
 echo "[init] Python project found..."
+
+command -v docker >/dev/null 2>&1 || { echo "Errore: 'docker' non trovato nel PATH dell'host."; exit 1; }
+echo "docker found..."
+command -v uv >/dev/null 2>&1 || { echo "Errore: 'uv' non trovato nel PATH dell'host."; exit 1; }
+echo "uv found..."
+
+
+echo "WARNING: COPIO DIRETTAMENTE Dockerfile.Python..."
+
+#DOCKERFILE=~/.local/share/docker-dev/Dockerfile.$P_TYPE
+DOCKERFILE=Dockerfile.$P_TYPE
+if [[ -f $DOCKERFILE ]]; then
+  #echo "$DOCKERFILE --> ok"
+  #echo "copio in $PROJECT_DIR ..."
+  cp $DOCKERFILE $PROJECT_DIR
+  DOCKERFILE="$PROJECT_DIR/Dockerfile.${P_TYPE}" ### !!!
+  echo "...Dockerfile --> $DOCKERFILE"
+fi
+
+echo "WARNING: COPIO DIRETTAMENTE entrypoint.sh..."
+#ENTRYPOINT=~/.local/share/docker-dev/entrypoint.sh
+ENTRYPOINT=entrypoint.Python.sh
+if [[ -f $ENTRYPOINT ]]; then
+  #echo "$ENTRYPOINT --> ok"
+  cp $ENTRYPOINT $PROJECT_DIR
+  ENTRYPOINT="$PROJECT_DIR/entrypoint.${P_TYPE}.sh"
+  echo "...entrypoint --> $ENTRYPOINT"
+fi
+
+
+cd "$PROJECT_DIR"
+
+# ---- Step 1: uv init (only if needed) ----
+#
 
 if [ ! -f "pyproject.toml" ]; then
   echo "[init] Missing pyproject.toml -> uv init"
