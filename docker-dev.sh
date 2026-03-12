@@ -331,7 +331,7 @@ echo "Volume Name    : $VOLUME_NAME"
 APP_DIR_IN_CONTAINER="/app" 
 VENV_DIR_IN_CONTAINER="/app/.venv" 
 
-DOCKER_RUN_EXTRA_ARGS="${DOCKER_RUN_EXTRA_ARGS:-}"
+DOCKER_RUN_EXTRA_ARGS="${DOCKER_RUN_EXTRA_ARGS:-"--rm -it"}"
 
 echo "APP_DIR_IN_CONTAINER  : $APP_DIR_IN_CONTAINER"
 echo "VENV_DIR_IN_CONTAINER : $VENV_DIR_IN_CONTAINER"
@@ -435,7 +435,7 @@ docker volume create uv-python >/dev/null
 docker run --rm \
 	-v uv-python:/uvpy \
 	alpine:3.20 \
-       	ash -c "chown $UID_:$GID_ /uvpy"
+       	sh -c "chown $UID_:$GID_ /uvpy" # change from ash to sh
 
 
 echo "[ $(pwd)/Dockerfile ]"
@@ -458,7 +458,6 @@ else
 fi
 
 # ---- Step 5: run container ----
-# docker run -it -p 8000:8000 -v "/home/starq/REP/DEV/Python/foo:/app" -v venv.DEV.foo:/app/.venv
 #
 if docker ps -a --format '{{.Names}}' | grep -qx "${CONTAINER_NAME}"; then
   echo "[init] Rimuovo container esistente: ${CONTAINER_NAME}"
@@ -466,26 +465,25 @@ if docker ps -a --format '{{.Names}}' | grep -qx "${CONTAINER_NAME}"; then
 fi
 
 echo "[init] Avvio container: ${CONTAINER_NAME}"
+
+# NOTA: ${DOCKER_RUN_EXTRA_ARGS} senza "" evita espansione in ' ' se vuoto
+# debug
+# set -x
 if [ "${#CONTAINER_CMD[@]}" -gt 0 ]; then
   echo "[init] run container with arguments: < $ONE_LINE_CONTAINER_CMD>"
-  #docker run --rm -it \
-  docker run -it \
+  docker run ${DOCKER_RUN_EXTRA_ARGS} \
     --name "${CONTAINER_NAME}" \
     -v "${PROJECT_DIR}:${APP_DIR_IN_CONTAINER}" \
     -v "${VOLUME_NAME}:${VENV_DIR_IN_CONTAINER}" \
-    -v uv-python:/home/$HOSTUSER/.local/share/uv/python \ # TODO UV_PYTHON_DIR
-    ${DOCKER_RUN_EXTRA_ARGS} \
+    -v "uv-python:/home/${HOSTUSER}/.local/share/uv/python" \
     "${IMAGE_NAME}" \
     "${CONTAINER_CMD[@]}"
 else
-  echo "[init] run container with NO arguments"
-  #docker run --rm -it \
-  docker run -it \
+  docker run ${DOCKER_RUN_EXTRA_ARGS} \
     --name "${CONTAINER_NAME}" \
     -v "${PROJECT_DIR}:${APP_DIR_IN_CONTAINER}" \
     -v "${VOLUME_NAME}:${VENV_DIR_IN_CONTAINER}" \
-    -v uv-python:/home/$HOSTUSER/.local/share/uv/python \ # TODO UV_PYTHON_DIR
-    ${DOCKER_RUN_EXTRA_ARGS} \
+    -v "uv-python:/home/${HOSTUSER}/.local/share/uv/python" \
     "${IMAGE_NAME}"
 fi
 
