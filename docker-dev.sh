@@ -24,6 +24,8 @@
 ###############################################
 set -euo pipefail
 
+MANAGED_P_TYPES=("Python" "Typescript" "Javascript")
+
 usage() {
   echo "Usage: $0 [-d PROJECT_DIR] [-i IMAGE_NAME] [-c CONTAINER_NAME] [-v VOLUME_NAME]"
   echo "  -d  Specify the project directory (default: current working directory)"
@@ -47,7 +49,6 @@ ask_to_proceed() {
     return 1
   fi
 }
-
 
 validate_project() {
   local project="$1"
@@ -221,13 +222,35 @@ create_directory() {
 is_absolute() {
   local _tag="[is_absolute]"
   if [[ "$1" =~ ^/ ]]; then
-    echo "$_tag test : absolute path?"
+    #echo "$_tag test : absolute path?"
     return 0
   fi
-    echo "$_tag test: relative path?"
+    #echo "$_tag test: relative path?"
     return 1
 }
+
+check_project_type() {
+  local P_TYPE="$1" 
+  local FOUND=false
+  echo "project type=<$P_TYPE>"
+
+  for TYPE in "${MANAGED_P_TYPES[@]}"; do
+    if [[ "$P_TYPE" == "$TYPE" ]]; then
+      FOUND=true
+      break
+    fi
+  done
+
+  if [[ "$FOUND" == false ]]; then
+    local ALLOWED_TYPES=$(IFS=", "; echo "${MANAGED_P_TYPES[*]}")
+    echo "[init] Can manage the following projects only: $ALLOWED_TYPES."
+    return 1
+  fi
+  echo "[init] Project type '$P_TYPE' is valid."
+  return 0
+}
 ##################################################################################################
+
 
 validate_org;
 
@@ -237,6 +260,10 @@ for arg in "$@"; do
   case $arg in
     --target=*)
       _target="${arg#--target=}"
+      # debug
+      echo "[init - debug] target=${_target}"
+      exit 0
+
       if ! check "$_target"; then
         echo "invalid argument --target=$_target"
         exit 1
@@ -301,6 +328,10 @@ if [ $REP_INDEX -ne -1 ]; then
   P_TARGET=${components[REP_INDEX + 1]}
   P_TYPE=${components[REP_INDEX + 2]}
 
+  if ! check_project_type "$P_TYPE"; then
+    exit 1
+  fi
+
   # Format P_NAME to replace '-' with '_'
   P_NAME=${P_NAME//-/_}
 
@@ -350,12 +381,13 @@ fi
 
 # check Project type
 #
-echo "project type=<$P_TYPE>"
-if [[ "$P_TYPE" != "Python" ]]; then
-  echo "[init] Can manage Python projects only."
-  exit 1
-fi
-echo "[init] Python project found..."
+#echo "project type=<$P_TYPE>"
+#if [[ "$P_TYPE" != "Python" ]]; then
+#  echo "[init] Can manage Python projects only."
+#  exit 1
+#fi
+
+echo "[init] ${P_TYPE} project found..."
 
 command -v docker >/dev/null 2>&1 || { echo "Errore: 'docker' non trovato nel PATH dell'host."; exit 1; }
 echo "docker found..."
