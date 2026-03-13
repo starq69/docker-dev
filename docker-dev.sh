@@ -359,9 +359,9 @@ echo "[init] Python project found..."
 
 command -v docker >/dev/null 2>&1 || { echo "Errore: 'docker' non trovato nel PATH dell'host."; exit 1; }
 echo "docker found..."
-command -v uv >/dev/null 2>&1 || { echo "Errore: 'uv' non trovato nel PATH dell'host."; exit 1; }
-echo "uv found..."
 
+#command -v uv >/dev/null 2>&1 || { echo "Errore: 'uv' non trovato nel PATH dell'host."; exit 1; }
+#echo "uv found..."
 
 echo "WARNING: COPIO DIRETTAMENTE Dockerfile.Python..."
 
@@ -385,58 +385,25 @@ if [[ -f $ENTRYPOINT ]]; then
   echo "...entrypoint --> $ENTRYPOINT"
 fi
 
-
 cd "$PROJECT_DIR"
 
-# ---- Step 1: uv init (only if needed) ----
-#
-
-#if [ ! -f "pyproject.toml" ]; then
-#  echo "[init] Missing pyproject.toml -> uv init"
-#  uv init
-#else
-#  echo "[init] pyproject.toml already present -> skip uv init"
-#fi
-
-# ---- Step 2: uv lock (create if missing, refresh if needed) ----
-#
-# if [ ! -f "uv.lock" ]; then
-#   echo "[init] Missing uv.lock -> uv lock"
-#   uv lock
-# else
-#   echo "[init] Controllo allineamento uv.lock -> uv lock --check"
-#   if ! uv lock --check; then
-#     echo "[init] uv.lock non allineato -> uv lock (rigenero)"
-#     uv lock
-#   else
-#     echo "[init] uv.lock ok -> skip"
-#   fi
-# fi
-
-# ---- Step 3.1: create venv volume (idempotent) 
+# ---- Step 3.1: create (if not exist) venv volume and make it writable by UID/GID
 #
 echo "[init] Activate docker volume ${VOLUME_NAME}"
 docker volume create "${VOLUME_NAME}" >/dev/null
-
-# ---- Step 3.1b: init-volume-chown (make volume writable by host UID/GID)
-#
 docker run --rm \
 	-v "${VOLUME_NAME}:${APP_DIR_IN_CONTAINER}" \
 	alpine:3.20 \
 	sh -c "mkdir -p ${APP_DIR_IN_CONTAINER} && chown -R ${UID_}:${GID_} ${APP_DIR_IN_CONTAINER}" >/dev/null
 
-# ---- Step 3.2: create uv-python volume (idempotent)
+# ---- Step 3.2: create (if not exist) uv-python volume iand make it writable by UID/GID
 #
 echo "[init] Activate docker volume uv-python"
 docker volume create uv-python >/dev/null
-
-# ---- Step 3.2b: make volume writable by host UID/GID
-#
 docker run --rm \
 	-v uv-python:/uvpy \
 	alpine:3.20 \
        	sh -c "chown $UID_:$GID_ /uvpy" # change from ash to sh
-
 
 echo "[ $(pwd)/Dockerfile ]"
 

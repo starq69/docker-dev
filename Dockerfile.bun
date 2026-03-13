@@ -1,0 +1,43 @@
+#RUN groupadd -g ${GID} ${HOSTUSER} && \
+#    useradd -m -u ${UID} -g ${GID} ${HOSTUSER} && \
+#    ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && \
+#    echo $TZ > /etc/timezone && \
+#    apt-get update && \
+#    apt-get clean && \
+#    rm -rf /var/lib/apt/lists/*
+
+FROM oven/bun:debian
+
+ARG HOSTUSER=bun
+ARG UID=1000
+ARG GID=1000
+ARG APP_DIR=/app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    passwd \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN set -e; \
+    # 1. Gruppo: crea se il GID non esiste
+    if ! getent group "${GID}" > /dev/null; then \
+        echo "Creazione gruppo ${HOSTUSER} (GID: ${GID})"; \
+        groupadd -g "${GID}" "${HOSTUSER}"; \
+    else \
+        echo "GID ${GID} già in uso da: $(getent group "${GID}" | cut -d: -f1)"; \
+    fi; \
+    \
+    # 2. Utente: crea se l'UID non esiste
+    if ! getent passwd "${UID}" > /dev/null; then \
+        echo "Creazione utente ${HOSTUSER} (UID: ${UID})"; \
+        useradd -m -u "${UID}" -g "${GID}" "${HOSTUSER}"; \
+    else \
+        echo "UID ${UID} già in uso da $(getent passwd "${UID}" | cut -d: -f1)"; \
+    fi
+
+COPY entrypoint.bun.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+USER ${UID}
+WORKDIR ${APP_DIR}
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
