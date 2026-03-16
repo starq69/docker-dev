@@ -24,7 +24,7 @@
 ###############################################
 set -euo pipefail
 
-MANAGED_P_TYPES=("Python" "Typescript" "Javascript")
+#MANAGED_P_TYPES=("Python" "Typescript" "Javascript")
 
 usage() {
   echo "Usage: $0 [-d PROJECT_DIR] [-i IMAGE_NAME] [-c CONTAINER_NAME] [-v VOLUME_NAME]"
@@ -60,6 +60,51 @@ validate_project() {
   fi
 }
 
+ex_validate_project() {
+  # 
+  # project setup
+  # 
+  local __PROJECT_DIR="$1"
+  _tag="[ex_validate_project]"
+
+  # Split PROJECT_DIR into components
+  IFS='/' read -r -a components <<< "$__PROJECT_DIR"
+
+  # Find the index of 'REP'
+  REP_INDEX=-1
+  for i in "${!components[@]}"; do
+    if [ "${components[i]}" = "REP" ]; then
+      REP_INDEX=$i
+      break
+    fi
+  done
+  echo "$_tag [debug] TODO: check if REP index found... <${REP_INDEX}>"
+  echo "$_tag [debug] ...or if REP index = last index!"
+
+  if [ $REP_INDEX -ne -1 ]; then
+    # Extract project name, type, and target from PROJECT_DIR
+    P_NAME=$(basename "$__PROJECT_DIR" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/_/g')
+    P_TARGET=${components[REP_INDEX + 1]}
+    P_TYPE=${components[REP_INDEX + 2]}
+
+    #echo "...segue check_project_type..."
+    #if ! check_project_type "$P_TYPE"; then
+    #  exit 1
+    #fi
+
+    # Format P_NAME to replace '-' with '_'
+    P_NAME=${P_NAME//-/_}
+
+    echo "Project Folder : $__PROJECT_DIR"
+    echo "Project Name   : $P_NAME"
+    echo "Project Type   : $P_TYPE"	# Project Language...
+    echo "Project Target : $P_TARGET"
+  else
+    echo "ERROR: 'REP' directory not found in path [ $PROJECT_DIR ]"
+    exit 1
+  fi
+}
+
 validate_org() {
   if [ -z "${ORG+x}" ]; then
     # ORG is NOT set
@@ -83,6 +128,11 @@ validate_org() {
   echo "ORG : $ORG"
   echo "BASE: $BASE"
 
+  mapfile -t MANAGED_P_TYPES < <(find "$BASE" -maxdepth 1 -mindepth 1 -type d -printf '%f\n')
+  echo "Managed Project types:"
+  local __TYPES=$(IFS=", "; echo "${MANAGED_P_TYPES[*]}")
+  echo "$__TYPES"
+
 }
 
 is_valid() {
@@ -92,25 +142,25 @@ is_valid() {
 
     #echo "$_tag [debug] $1"
 
-    # Condition 1: Only allow a-zA-Z0-9-_/. characters
+    # 1: Only allow a-zA-Z0-9-_/. characters
     if [[ ! "$input" =~ ^[a-zA-Z0-9._/-]+$ ]]; then
         echo "$_tag Condition 1 FAIL"
         return 1
     fi
 
-    # Condition 2: Can't contain two consecutive dots or slashes
+    # 2: Can't contain two consecutive dots or slashes
     if [[ "$input" =~ \.\. ]] || [[ "$input" =~ // ]]; then
         echo "$_tag Condition 2 FAIL"
         return 1
     fi
 
-    # Condition 3: Can't contain the sequence '/.'
+    # 3: Can't contain the sequence '/.'
     if [[ "$input" =~ /\. ]]; then
         echo "$_tag Condition 3 FAIL"
         return 1
     fi
 
-    # Condition 4: Can't begin or end with a dot or slash
+    # 4: Can't begin or end with a dot or slash
     if [[ "$input" =~ ^[./] ]] || [[ "$input" =~ [./]$ ]]; then
         echo "$_tag Condition 4 FAIL"
         return 1
@@ -136,12 +186,20 @@ check_dir() {
 check() {
   local _tag="[check]"
   _resolved="$(readlink -f "$1")" 
+  echo "$_tag [debug] resolved=${_resolved}"
 
   if [[ -d "$_resolved" ]]; then
+    echo "$_tag [debug] -d pass"
     if [[ -r "$_resolved" ]] && [[ -w "$_resolved" ]]; then
-      echo "$_tag $1 is valid"
+      echo "$_tag [debug] $1 - -r -w pass"
       PROJECT_DIR="$_resolved"
-      return 0
+      #
+      ### path assoluto a progetto esistente ###
+      #
+      # TODO 
+      # hyp.:
+      # validare il progetto prima di return: ex_validate_project()
+      ###return 0
     else
       echo "$_tag missing rw permission on $_resolved"
       return 1
@@ -149,33 +207,40 @@ check() {
 
   else
     #
-    # TODO inglobare il controllo is_absolute in is_valid ?
-    # fattibile ma si perde il msg informativo...
+    # is_absolute() puo:
+    # verificare se la prima parte di $1 e' un P_TYPE valido e scartare tutto il resto
     #
     if is_absolute "$1"; then
       echo "$_tag cannot create new absolute path $1"
       echo "$_tag use relative path instead"
       return 1
-    else
-      echo "$_tag relative path passed: $1"
     fi
+    echo "$_tag is_absolute() pass"
 
-    # check for invalid characters
     # TODO controllare anche la presenza di almeno un separatore '/', necessario
-    #      ora il controllo e' sulla create_directory()
+    # ?... ora il controllo e' sulla create_directory()
     if ! is_valid $1; then
       echo "$_tag $1 is NOT valid"
-      exit 1
-    #else
-    #  echo "$_tag $1 is valid"
+      return 1
     fi
+    echo "$_tag is_valid() pass"
 
     if ! create_directory "$1"; then
       echo "$_tag Error creating $1" >&2
       return 1
     fi
-    return 0
+    #
+    # TODO
+    # hyp.:
+    # validare il progetto prima di uscire: ex_validate_project()
+    #
+    ###return 0
   fi
+  # new
+  echo "$_tag NEW: ex_validate_project() ...."
+  ex_validate_project $PROJECT_DIR
+  echo "debug exit"
+  exit 1
 }
 
 create_directory() {
@@ -195,13 +260,14 @@ create_directory() {
   fi
 
   if [ ! -d "$BASE/$A" ]; then  # readlink ?
-    P_TYPES=$(find "$BASE" -maxdepth 1 -mindepth 1 -type d -printf '%f\n')
-    #echo "$_tag WARNING: $BASE/$A does not exist" >&2
     echo "$_tag WARNING: $A project type is NOT defined" >&2
-    echo "$_tag Please select one of the following available project types:"
-    echo "$P_TYPES"
+    echo "$_tag Select one of the following project types:"
+    local ALLOWED_TYPES=$(IFS=", "; echo "${MANAGED_P_TYPES[*]}")
+    echo "$_tag $ALLOWED_TYPES"
     return 1
   fi
+  #debug
+  echo "$_tag A (p_type) = ${A}"
 
   if [ -n "$B" ]; then
     if [ ! -d "$(readlink -f "$BASE/$A/$B")" ]; then  ### mkdir only if not exist
@@ -210,6 +276,8 @@ create_directory() {
     else
       echo "$_tag directory already exist"
     fi
+    #debug
+    echo "$_tag B (name-parts) = ${B}"
     PROJECT_DIR="$BASE/$A/$B"
   else
     echo "$_tag WARNING: Missing project Name"
@@ -230,6 +298,9 @@ is_absolute() {
 }
 
 check_project_type() {
+  #
+  # TODO rimuovere
+  #
   local P_TYPE="$1" 
   local FOUND=false
   echo "project type=<$P_TYPE>"
@@ -246,11 +317,11 @@ check_project_type() {
     echo "[init] Can manage the following projects only: $ALLOWED_TYPES."
     return 1
   fi
-  echo "[init] Project type '$P_TYPE' is valid."
+  #echo "[init] Project type '$P_TYPE' is valid."
   return 0
 }
 ##################################################################################################
-
+echo "Welcome to docker-dev"
 
 validate_org;
 
@@ -260,10 +331,6 @@ for arg in "$@"; do
   case $arg in
     --target=*)
       _target="${arg#--target=}"
-      # debug
-      echo "[init - debug] target=${_target}"
-      exit 0
-
       if ! check "$_target"; then
         echo "invalid argument --target=$_target"
         exit 1
@@ -292,57 +359,62 @@ shift $((OPTIND-1))
 
 CONTAINER_CMD=("$@")
 ONE_LINE_CONTAINER_CMD=$(printf "%s " "${CONTAINER_CMD[@]}")
-echo "NON-Options arguments (container command): $ONE_LINE_CONTAINER_CMD"
+#echo "NON-Options arguments (container command): $ONE_LINE_CONTAINER_CMD"
 
 TZ="${TZ:-Europe/Rome}"
 HOSTUSER="$(id -un)"    	# ${HOSTUSER:-$(id -un)}"
 UID_="${UID_:-$(id -u)}"
 GID_="${GID_:-$(id -g)}"
 
-
-if [ -z "${PROJECT_DIR+x}" ]; then
-  echo "[init] PROJECT_DIR IS NOT SET"
-  #exit 1
-fi
+#if [ -z "${PROJECT_DIR+x}" ]; then
+#  echo "[init] PROJECT_DIR IS NOT SET"
+#fi
 
 PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
+echo "[debug] project_dir=${PROJECT_DIR}"
 
 # TEST
 #validate_project $PROJECT_DIR;
 
+ex_validate_project "$PROJECT_DIR"
+###
+
 # Split PROJECT_DIR into components
-IFS='/' read -r -a components <<< "$PROJECT_DIR"
+#IFS='/' read -r -a components <<< "$PROJECT_DIR"
 
 # Find the index of 'REP'
-REP_INDEX=-1
-for i in "${!components[@]}"; do
-  if [ "${components[i]}" = "REP" ]; then
-    REP_INDEX=$i
-    break
-  fi
-done
+#REP_INDEX=-1
+#for i in "${!components[@]}"; do
+#  if [ "${components[i]}" = "REP" ]; then
+#    REP_INDEX=$i
+#    break
+#  fi
+#done
 
-if [ $REP_INDEX -ne -1 ]; then
+#if [ $REP_INDEX -ne -1 ]; then
   # Extract project name, type, and target from PROJECT_DIR
-  P_NAME=$(basename "$PROJECT_DIR" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/_/g')
-  P_TARGET=${components[REP_INDEX + 1]}
-  P_TYPE=${components[REP_INDEX + 2]}
+#  P_NAME=$(basename "$PROJECT_DIR" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/_/g')
+#  P_TARGET=${components[REP_INDEX + 1]}
+#  P_TYPE=${components[REP_INDEX + 2]}
 
-  if ! check_project_type "$P_TYPE"; then
-    exit 1
-  fi
+#  echo "...segue check_project_type..."
+#  if ! check_project_type "$P_TYPE"; then
+#    exit 1
+#  fi
 
   # Format P_NAME to replace '-' with '_'
-  P_NAME=${P_NAME//-/_}
+#  P_NAME=${P_NAME//-/_}
 
-  echo "Project Folder : $PROJECT_DIR"
-  echo "Project Name   : $P_NAME"
-  echo "Project Type   : $P_TYPE"	# Project Language...
-  echo "Project Target : $P_TARGET"
-else
-  echo "ERROR: 'REP' directory not found in path [ $PROJECT_DIR ]"
-  exit 1
-fi
+#  echo "Project Folder : $PROJECT_DIR"
+#  echo "Project Name   : $P_NAME"
+#  echo "Project Type   : $P_TYPE"	# Project Language...
+#  echo "Project Target : $P_TARGET"
+#else
+#  echo "ERROR: 'REP' directory not found in path [ $PROJECT_DIR ]"
+#  exit 1
+#fi
+
+###
 
 # Default values for other variables
 #
