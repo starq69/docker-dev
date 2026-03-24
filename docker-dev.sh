@@ -69,6 +69,8 @@ ex_validate_project() {
 
   # Split PROJECT_DIR into components
   IFS='/' read -r -a components <<< "$__PROJECT_DIR"
+  c_size=${#components[@]}
+  echo "$_tag [debug] c_size=${c_size}"
 
   # Find the index of 'REP'
   REP_INDEX=-1
@@ -166,6 +168,12 @@ is_valid() {
         return 1
     fi
 
+    # 5: Must contain at least one '/'
+    if [[ ! "$input" =~ / ]]; then
+        echo "$_tag Condition 5 FAIL"
+        return 1
+    fi
+
     return 0
 }
 
@@ -195,21 +203,12 @@ check() {
       PROJECT_DIR="$_resolved"
       #
       ### path assoluto a progetto esistente ###
-      #
-      # TODO 
-      # hyp.:
-      # validare il progetto prima di return: ex_validate_project()
-      ###return 0
     else
       echo "$_tag missing rw permission on $_resolved"
       return 1
     fi
 
   else
-    #
-    # is_absolute() puo:
-    # verificare se la prima parte di $1 e' un P_TYPE valido e scartare tutto il resto
-    #
     if is_absolute "$1"; then
       echo "$_tag cannot create new absolute path $1"
       echo "$_tag use relative path instead"
@@ -217,68 +216,60 @@ check() {
     fi
     echo "$_tag is_absolute() pass"
 
-    # TODO controllare anche la presenza di almeno un separatore '/', necessario
-    # ?... ora il controllo e' sulla create_directory()
     if ! is_valid $1; then
       echo "$_tag $1 is NOT valid"
       return 1
     fi
     echo "$_tag is_valid() pass"
 
-    if ! create_directory "$1"; then
+    if ! create_relative_folder "$1"; then
       echo "$_tag Error creating $1" >&2
       return 1
     fi
-    #
-    # TODO
-    # hyp.:
-    # validare il progetto prima di uscire: ex_validate_project()
-    #
-    ###return 0
   fi
-  # new
+
   echo "$_tag NEW: ex_validate_project() ...."
   ex_validate_project $PROJECT_DIR
   echo "debug exit"
   exit 1
 }
 
-create_directory() {
-  local _tag="[create_directory]"
-  local dir="$1"
-  local path="$BASE"
-
-  IFS=/ read -r -a components <<< "$dir"
-
-  local A="${components[0]}"
-  local B=""
-
-  # Only set B if there's a "/" in the path
+create_relative_folder() {
   #
-  if [[ "$dir" == */* ]]; then
-    B="${dir#*/}"
-  fi
+  # _full_target : e' un project target relativo a ORG (es.: Python/foo corrisp. a $BASE/Python/foo)
+  # _p_type      : e' un project type ammesso (es.: Python)
+  # _p_target    : e' un project target (es.: /foo)
+  #
+  local _tag="[create_relative_folder]"
+  local _full_target="$1"
 
-  if [ ! -d "$BASE/$A" ]; then  # readlink ?
-    echo "$_tag WARNING: $A project type is NOT defined" >&2
+  # is_valid() garantisce che ci siano almeno 2 elementi separati da '/'
+  #
+  IFS=/ read -r -a components <<< "$_full_target"
+
+  local _p_type="${components[0]}"
+  local _p_target="${_full_target#*/}"
+
+  # debug
+  echo "$_tag p_type=${_p_type}"
+  echo "$_tag p_target=${_p_target}"
+
+  if [ ! -d "$BASE/$_p_type" ]; then  # readlink ?
+    echo "$_tag WARNING: $_p_type project type is NOT defined" >&2
     echo "$_tag Select one of the following project types:"
     local ALLOWED_TYPES=$(IFS=", "; echo "${MANAGED_P_TYPES[*]}")
     echo "$_tag $ALLOWED_TYPES"
     return 1
   fi
-  #debug
-  echo "$_tag A (p_type) = ${A}"
 
-  if [ -n "$B" ]; then
-    if [ ! -d "$(readlink -f "$BASE/$A/$B")" ]; then  ### mkdir only if not exist
-      echo "$_tag mkdir -p $BASE/$A/$B"
-      mkdir -p "$BASE/$A/$B"
+  if [ -n "$_p_target" ]; then
+    if [ ! -d "$(readlink -f "$BASE/$_p_type/$_p_target")" ]; then  ### mkdir only if not exist
+      echo "$_tag mkdir -p $BASE/$_p_type/$_p_target"
+      mkdir -p "$BASE/$_p_type/$_p_target"
     else
       echo "$_tag directory already exist"
     fi
-    #debug
-    echo "$_tag B (name-parts) = ${B}"
-    PROJECT_DIR="$BASE/$A/$B"
+    PROJECT_DIR="$BASE/$_p_type/$_p_target"
   else
     echo "$_tag WARNING: Missing project Name"
     return 1
