@@ -80,8 +80,7 @@ ex_validate_project() {
       break
     fi
   done
-  echo "$_tag [debug] TODO: check if REP index found... <${REP_INDEX}>"
-  echo "$_tag [debug] ...or if REP index = last index!"
+  echo "$_tag [debug] TODO: check if if REP index <${REP_INDEX}> is last index!"
 
   if [ $REP_INDEX -ne -1 ]; then
     # Extract project name, type, and target from PROJECT_DIR
@@ -108,6 +107,9 @@ ex_validate_project() {
 }
 
 validate_org() {
+  #
+  # 
+  #
   if [ -z "${ORG+x}" ]; then
     # ORG is NOT set
     echo "ORG is NOT set, fallback to $HOME"
@@ -123,18 +125,6 @@ validate_org() {
     ORG="$HOME"
     BASE="$HOME/REP"
   fi
-
-  # TEMP....
-  BASE="$HOME/REP/DEV" # TODO 
-
-  echo "ORG : $ORG"
-  echo "BASE: $BASE"
-
-  mapfile -t MANAGED_P_TYPES < <(find "$BASE" -maxdepth 1 -mindepth 1 -type d -printf '%f\n')
-  echo "Managed Project types:"
-  local __TYPES=$(IFS=", "; echo "${MANAGED_P_TYPES[*]}")
-  echo "$__TYPES"
-
 }
 
 is_valid() {
@@ -193,7 +183,23 @@ check_dir() {
 
 check() {
   local _tag="[check]"
+
+  #
+  # aggiorna $BASE con il valore dell'argomento --penv ($2)
+  #
+  BASE="$BASE/$2"
+
+  echo "ORG : $ORG"
+  echo "BASE: $BASE"
+
+  mapfile -t MANAGED_P_TYPES < <(find "$BASE" -maxdepth 1 -mindepth 1 -type d -printf '%f\n')
+  echo "Managed Project types:"
+  local __TYPES=$(IFS=", "; echo "${MANAGED_P_TYPES[*]}")
+  echo "    << $__TYPES >>"
+
+
   _resolved="$(readlink -f "$1")" 
+  echo "$_tag [debug] received=${1}"
   echo "$_tag [debug] resolved=${_resolved}"
 
   if [[ -d "$_resolved" ]]; then
@@ -316,33 +322,45 @@ echo "Welcome to docker-dev"
 
 validate_org;
 
-# Extract --target= mandatory argument or exit
+# Estrae --target e --penv 
 #
 for arg in "$@"; do
-  case $arg in
-    --target=*)
-      _target="${arg#--target=}"
-      if ! check "$_target"; then
-        echo "invalid argument --target=$_target"
-        exit 1
-      fi
-      shift
-      break
-      ;;
-  esac
+    case "$arg" in
+        --target=*)
+            _target="${arg#--target=}"
+            ;;
+        --penv=*)
+            _penv="${arg#--penv=}"
+            ;;
+    esac
 done
 
+# Fallback per penv
+#
+_penv="${_penv:-DEV}"
+
+# Validazione solo dopo aver letto entrambe le opzioni
+#
 if [ -z "${_target+x}" ]; then
-  echo "[init] missing --target argument"
-  exit 1
+    echo "[init] missing --target argument"
+    usage;
+    exit 1
 fi
 
-while getopts ":i:c:v:" opt; do
+if ! check "$_target" "$_penv" ; then
+    echo "check() FAIL"
+    exit 1
+fi
+
+
+while getopts ":i:c:v:h" opt; do
   case $opt in
     i) IMAGE_NAME=$OPTARG;;
     c) CONTAINER_NAME=$OPTARG;;
     v) VOLUME_NAME=$OPTARG;;
-    \?) usage;;
+    h) usage;;
+    \?) echo "Errore: opzione non valida: -$OPTARG" >&2
+	usage;;
   esac
 done
 
@@ -364,48 +382,7 @@ GID_="${GID_:-$(id -g)}"
 PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
 echo "[debug] project_dir=${PROJECT_DIR}"
 
-# TEST
-#validate_project $PROJECT_DIR;
-
 ex_validate_project "$PROJECT_DIR"
-###
-
-# Split PROJECT_DIR into components
-#IFS='/' read -r -a components <<< "$PROJECT_DIR"
-
-# Find the index of 'REP'
-#REP_INDEX=-1
-#for i in "${!components[@]}"; do
-#  if [ "${components[i]}" = "REP" ]; then
-#    REP_INDEX=$i
-#    break
-#  fi
-#done
-
-#if [ $REP_INDEX -ne -1 ]; then
-  # Extract project name, type, and target from PROJECT_DIR
-#  P_NAME=$(basename "$PROJECT_DIR" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/_/g')
-#  P_TARGET=${components[REP_INDEX + 1]}
-#  P_TYPE=${components[REP_INDEX + 2]}
-
-#  echo "...segue check_project_type..."
-#  if ! check_project_type "$P_TYPE"; then
-#    exit 1
-#  fi
-
-  # Format P_NAME to replace '-' with '_'
-#  P_NAME=${P_NAME//-/_}
-
-#  echo "Project Folder : $PROJECT_DIR"
-#  echo "Project Name   : $P_NAME"
-#  echo "Project Type   : $P_TYPE"	# Project Language...
-#  echo "Project Target : $P_TARGET"
-#else
-#  echo "ERROR: 'REP' directory not found in path [ $PROJECT_DIR ]"
-#  exit 1
-#fi
-
-###
 
 # Default values for other variables
 #
