@@ -50,6 +50,53 @@ ask_to_proceed() {
   fi
 }
 
+check_docker() {
+    local tag="[docker-check]"
+    local docker_error
+
+    if ! command -v docker >/dev/null 2>&1; then
+        echo "$tag ERRORE: 'docker' non trovato nel PATH di WSL." >&2
+        return 1
+    fi
+
+    if docker_error=$(docker info 2>&1); then
+        echo "$tag Docker Desktop è avviato e raggiungibile."
+        return 0
+    fi
+
+    echo "$tag ERRORE: Docker daemon non raggiungibile." >&2
+    echo "$tag Dettaglio:" >&2
+    printf '%s\n' "$docker_error" >&2
+    echo >&2
+    echo "$tag Possibili cause:" >&2
+    echo "$tag - Docker Desktop non è stato avviato su Windows." >&2
+    echo "$tag - L'integrazione WSL 2 non è abilitata per questa distribuzione." >&2
+    echo "$tag - Il contesto Docker selezionato non è quello corretto." >&2
+
+    return 1
+}
+
+ensure_initialized_volume() {
+    local volume_name="$1"
+    local mount_path="$2"
+    local init_cmd="$3"
+
+    if docker volume inspect "$volume_name" >/dev/null 2>&1; then
+        echo "[init] Docker volume già presente: ${volume_name}"
+        return 0
+    fi
+
+    echo "[init] Creo e inizializzo Docker volume: ${volume_name}"
+
+    docker volume create "$volume_name" >/dev/null
+
+    docker run --rm \
+        -v "${volume_name}:${mount_path}" \
+        alpine:3.20 \
+        sh -c "$init_cmd" \
+        >/dev/null
+}
+
 validate_project() {
   local project="$1"
   echo "[init] validate_project: $project"
@@ -235,9 +282,9 @@ check() {
   fi
 
   echo "$_tag NEW: ex_validate_project() ...."
-  ex_validate_project $PROJECT_DIR
-  echo "debug exit"
-  exit 1
+  #ex_validate_project $PROJECT_DIR
+  #echo "debug exit"
+  #exit 1
 }
 
 create_relative_folder() {
@@ -317,13 +364,19 @@ check_project_type() {
   #echo "[init] Project type '$P_TYPE' is valid."
   return 0
 }
+
 ##################################################################################################
+
 echo "Welcome to docker-dev"
 
+##################################################################################################
 validate_org;
 
-# Estrae --target e --penv 
-#
+
+_target=""
+_penv="DEV"
+_remaining_args=()
+
 for arg in "$@"; do
     case "$arg" in
         --target=*)
@@ -332,39 +385,62 @@ for arg in "$@"; do
         --penv=*)
             _penv="${arg#--penv=}"
             ;;
+        --help)
+            usage
+            ;;
+        *)
+            _remaining_args+=("$arg")
+            ;;
     esac
 done
 
-# Fallback per penv
-#
-_penv="${_penv:-DEV}"
+if [[ -z "$_target" ]]; then
+    echo "[init] missing --target argument" >&2
+    usage
+fi
 
-# Validazione solo dopo aver letto entrambe le opzioni
+# Sostituisce gli argomenti originali con quelli rimasti:
+# -i, -c, -v, -h e argomenti posizionali
 #
-if [ -z "${_target+x}" ]; then
-    echo "[init] missing --target argument"
-    usage;
+set -- "${_remaining_args[@]}"
+
+if ! check "$_target" "$_penv"; then
+    echo "check() FAIL" >&2
     exit 1
 fi
 
-if ! check "$_target" "$_penv" ; then
-    echo "check() FAIL"
-    exit 1
-fi
+PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
+echo "[debug] project_dir=${PROJECT_DIR}"
+ex_validate_project "$PROJECT_DIR"
 
+OPTIND=1
 
 while getopts ":i:c:v:h" opt; do
-  case $opt in
-    i) IMAGE_NAME=$OPTARG;;
-    c) CONTAINER_NAME=$OPTARG;;
-    v) VOLUME_NAME=$OPTARG;;
-    h) usage;;
-    \?) echo "Errore: opzione non valida: -$OPTARG" >&2
-	usage;;
-  esac
+    case "$opt" in
+        i)
+            IMAGE_NAME="$OPTARG"
+            ;;
+        c)
+            CONTAINER_NAME="$OPTARG"
+            ;;
+        v)
+            VOLUME_NAME="$OPTARG"
+            ;;
+        h)
+            usage
+            ;;
+        :)
+            echo "opzione -$OPTARG richiede un argomento" >&2
+            usage
+            ;;
+        \?)
+            echo "opzione non valida: -$OPTARG" >&2
+            usage
+            ;;
+    esac
 done
 
-shift $((OPTIND-1))
+shift $((OPTIND - 1))
 
 CONTAINER_CMD=("$@")
 ONE_LINE_CONTAINER_CMD=$(printf "%s " "${CONTAINER_CMD[@]}")
@@ -379,10 +455,9 @@ GID_="${GID_:-$(id -g)}"
 #  echo "[init] PROJECT_DIR IS NOT SET"
 #fi
 
-PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
-echo "[debug] project_dir=${PROJECT_DIR}"
-
-ex_validate_project "$PROJECT_DIR"
+##PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
+##echo "[debug] project_dir=${PROJECT_DIR}"
+##ex_validate_project "$PROJECT_DIR"
 
 # Default values for other variables
 #
@@ -419,18 +494,7 @@ if ! ask_to_proceed; then
   exit 1
 fi
 
-# check Project type
-#
-#echo "project type=<$P_TYPE>"
-#if [[ "$P_TYPE" != "Python" ]]; then
-#  echo "[init] Can manage Python projects only."
-#  exit 1
-#fi
-
-echo "[init] ${P_TYPE} project found..."
-
-command -v docker >/dev/null 2>&1 || { echo "Errore: 'docker' non trovato nel PATH dell'host."; exit 1; }
-echo "docker found..."
+check_docker
 
 #command -v uv >/dev/null 2>&1 || { echo "Errore: 'uv' non trovato nel PATH dell'host."; exit 1; }
 #echo "uv found..."
@@ -461,23 +525,38 @@ cd "$PROJECT_DIR"
 
 # ---- Step 3.1: create (if not exist) venv volume and make it writable by UID/GID
 #
-echo "[init] Activate docker volume ${VOLUME_NAME}"
-docker volume create "${VOLUME_NAME}" >/dev/null
-docker run --rm \
-	-v "${VOLUME_NAME}:${APP_DIR_IN_CONTAINER}" \
-	alpine:3.20 \
-	sh -c "mkdir -p ${APP_DIR_IN_CONTAINER} && chown -R ${UID_}:${GID_} ${APP_DIR_IN_CONTAINER}" >/dev/null
-
+#echo "[init] Activate docker volume ${VOLUME_NAME}"
+#docker volume create "${VOLUME_NAME}" >/dev/null
+#docker run --rm \
+#	-v "${VOLUME_NAME}:${APP_DIR_IN_CONTAINER}" \
+#	alpine:3.20 \
+#	sh -c "mkdir -p ${APP_DIR_IN_CONTAINER} && chown -R ${UID_}:${GID_} ${APP_DIR_IN_CONTAINER}" >/dev/null
+#
 # ---- Step 3.2: create (if not exist) uv-python volume iand make it writable by UID/GID
 #
-echo "[init] Activate docker volume uv-python"
-docker volume create uv-python >/dev/null
-docker run --rm \
-	-v uv-python:/uvpy \
-	alpine:3.20 \
-       	sh -c "chown $UID_:$GID_ /uvpy" # change from ash to sh
+#echo "[init] Activate docker volume uv-python"
+#docker volume create uv-python >/dev/null
+#docker run --rm \
+#	-v uv-python:/uvpy \
+#	alpine:3.20 \
+#       sh -c "chown $UID_:$GID_ /uvpy" # change from ash to sh
 
-echo "[ $(pwd)/Dockerfile ]"
+#echo "[ $(pwd)/Dockerfile ]"
+
+
+# ---- Step 3.1: volume della virtual environment del progetto ----
+
+ensure_initialized_volume \
+    "${VOLUME_NAME}" \
+    "${APP_DIR_IN_CONTAINER}" \
+    "mkdir -p '${APP_DIR_IN_CONTAINER}' && chown -R '${UID_}:${GID_}' '${APP_DIR_IN_CONTAINER}'"
+
+# ---- Step 3.2: cache/interpreti Python gestiti da uv ----
+
+ensure_initialized_volume \
+    "uv-python" \
+    "/uvpy" \
+    "mkdir -p /uvpy && chown -R '${UID_}:${GID_}' /uvpy"
 
 # ---- Step 4: build image ----
 #
