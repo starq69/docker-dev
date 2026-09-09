@@ -70,7 +70,10 @@ fi
 if [ -z "${1:-}" ]; then
     echo "[entrypoint] No command provided, using default command"
     #exec uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
-    exec bash
+    
+    # full hostname in prompt
+    export PS1='\u@\H:\w\$ '
+    exec bash --noprofile --norc -i
 else
     echo "[entrypoint] exec $(printf "%s " "$@")"
     exec "$@"

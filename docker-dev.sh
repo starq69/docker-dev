@@ -371,7 +371,7 @@ echo "Welcome to docker-dev"
 
 ##################################################################################################
 validate_org;
-
+check_docker;
 
 _target=""
 _penv="DEV"
@@ -380,17 +380,13 @@ _remaining_args=()
 for arg in "$@"; do
     case "$arg" in
         --target=*)
-            _target="${arg#--target=}"
-            ;;
+            _target="${arg#--target=}";;
         --penv=*)
-            _penv="${arg#--penv=}"
-            ;;
+            _penv="${arg#--penv=}";;
         --help)
-            usage
-            ;;
+            usage;;
         *)
-            _remaining_args+=("$arg")
-            ;;
+            _remaining_args+=("$arg");;
     esac
 done
 
@@ -418,25 +414,19 @@ OPTIND=1
 while getopts ":i:c:v:h" opt; do
     case "$opt" in
         i)
-            IMAGE_NAME="$OPTARG"
-            ;;
+            IMAGE_NAME="$OPTARG";;
         c)
-            CONTAINER_NAME="$OPTARG"
-            ;;
+            CONTAINER_NAME="$OPTARG";;
         v)
-            VOLUME_NAME="$OPTARG"
-            ;;
+            VOLUME_NAME="$OPTARG";;
         h)
-            usage
-            ;;
+            usage;;
         :)
             echo "opzione -$OPTARG richiede un argomento" >&2
-            usage
-            ;;
+            usage;;
         \?)
             echo "opzione non valida: -$OPTARG" >&2
-            usage
-            ;;
+            usage;;
     esac
 done
 
@@ -447,7 +437,7 @@ ONE_LINE_CONTAINER_CMD=$(printf "%s " "${CONTAINER_CMD[@]}")
 #echo "NON-Options arguments (container command): $ONE_LINE_CONTAINER_CMD"
 
 TZ="${TZ:-Europe/Rome}"
-HOSTUSER="$(id -un)"    	# ${HOSTUSER:-$(id -un)}"
+USER_="${USER_:-$(id -un)}"
 UID_="${UID_:-$(id -u)}"
 GID_="${GID_:-$(id -g)}"
 
@@ -482,7 +472,7 @@ DOCKER_RUN_EXTRA_ARGS="${DOCKER_RUN_EXTRA_ARGS:-"--rm -it"}"
 echo "APP_DIR_IN_CONTAINER  : $APP_DIR_IN_CONTAINER"
 echo "VENV_DIR_IN_CONTAINER : $VENV_DIR_IN_CONTAINER"
 echo "TZ                    : $TZ"
-echo "HOSTUSER              : $HOSTUSER"
+echo "USER                  : $USER_"
 echo "UID                   : $UID_"
 echo "GID                   : $GID_"
 echo
@@ -494,7 +484,7 @@ if ! ask_to_proceed; then
   exit 1
 fi
 
-check_docker
+#check_docker
 
 #command -v uv >/dev/null 2>&1 || { echo "Errore: 'uv' non trovato nel PATH dell'host."; exit 1; }
 #echo "uv found..."
@@ -544,14 +534,14 @@ cd "$PROJECT_DIR"
 #echo "[ $(pwd)/Dockerfile ]"
 
 
-# ---- Step 3.1: volume della virtual environment del progetto ----
+# ---- Step 3.1: create (if not exist) venv volume and make it writable by UID/GID
 
 ensure_initialized_volume \
     "${VOLUME_NAME}" \
     "${APP_DIR_IN_CONTAINER}" \
     "mkdir -p '${APP_DIR_IN_CONTAINER}' && chown -R '${UID_}:${GID_}' '${APP_DIR_IN_CONTAINER}'"
 
-# ---- Step 3.2: cache/interpreti Python gestiti da uv ----
+# ---- Step 3.2: create (if not exist) uv-python volume and make it writable by UID/GID
 
 ensure_initialized_volume \
     "uv-python" \
@@ -565,7 +555,7 @@ if docker inspect --type=image "$IMAGE_NAME" > /dev/null 2>&1; then
 else
   echo "[init] Build image: ${IMAGE_NAME} with Dockerfile <$DOCKERFILE>"
   docker build \
-    --build-arg "HOSTUSER=$HOSTUSER" \
+    --build-arg "HOSTUSER=$USER_" \
     --build-arg "UID=$UID_" \
     --build-arg "GID=$GID_" \
     --build-arg "TZ=$TZ" \
@@ -591,17 +581,19 @@ if [ "${#CONTAINER_CMD[@]}" -gt 0 ]; then
   echo "[init] run container with arguments: < $ONE_LINE_CONTAINER_CMD>"
   docker run ${DOCKER_RUN_EXTRA_ARGS} \
     --name "${CONTAINER_NAME}" \
+    --hostname "${CONTAINER_NAME}" \
     -v "${PROJECT_DIR}:${APP_DIR_IN_CONTAINER}" \
     -v "${VOLUME_NAME}:${VENV_DIR_IN_CONTAINER}" \
-    -v "uv-python:/home/${HOSTUSER}/.local/share/uv/python" \
+    -v "uv-python:/home/${USER_}/.local/share/uv/python" \
     "${IMAGE_NAME}" \
     "${CONTAINER_CMD[@]}"
 else
   docker run ${DOCKER_RUN_EXTRA_ARGS} \
     --name "${CONTAINER_NAME}" \
+    --hostname "${CONTAINER_NAME}" \
     -v "${PROJECT_DIR}:${APP_DIR_IN_CONTAINER}" \
     -v "${VOLUME_NAME}:${VENV_DIR_IN_CONTAINER}" \
-    -v "uv-python:/home/${HOSTUSER}/.local/share/uv/python" \
+    -v "uv-python:/home/${USER_}/.local/share/uv/python" \
     "${IMAGE_NAME}"
 fi
 
