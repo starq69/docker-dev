@@ -1,0 +1,32 @@
+L'integrazione con Apache Iceberg è un caso leggermente più complesso rispetto a MongoDB, perché Iceberg non è un database "attivo"
+(un server che gira e ascolta su una porta), ma è un **formato di tabella** (una specifica di come i dati devono essere organizzati su disco).
+
+Ecco i dettagli per capire come gestire il Docker Compose in questo caso:
+
+### 1. Iceberg non è un "server"
+Iceberg è un layer di gestione che sta sopra i file (solitamente in formato Parquet) salvati in un file system (come S3, MinIO o HDFS).
+
+### 2. Il concetto di "Catalog"
+Per far funzionare Iceberg, hai bisogno di un **Catalog**, che è l'unico componente che potrebbe richiedere un container dedicato nel tuo Docker Compose.
+Il Catalog tiene traccia di dove si trovano i file delle tabelle. I catalog più comuni sono:
+*   **AWS Glue** (gestito)
+*   **Project Nessie** (un server dedicato)
+*   **Hive Metastore** (un server dedicato)
+
+Se decidi di usare, ad esempio, **Project Nessie** o **Hive Metastore** come catalog, quei container saranno **completamente indipendenti dal linguaggio**.
+Che tu usi Python (con PyIceberg) o Java (con Spark), entrambi si collegheranno al container del Catalog usando lo stesso protocollo.
+
+### 3. Dove risiede la dipendenza dal linguaggio?
+La dipendenza dal linguaggio in Iceberg non sta nel "server", ma nel **motore di computazione** (compute engine) che usi per leggere e scrivere i dati:
+*   Se usi **Python**, userai PyIceberg o Spark (via PySpark).
+*   Se usi **Java/Scala**, userai Spark, Flink o Trino.
+
+Tutti questi motori sono in grado di leggere lo stesso set di dati Iceberg perché seguono la stessa specifica di formato.
+
+### In sintesi, per il tuo Docker Compose:
+Se il tuo progetto prevede Iceberg, il tuo file Compose probabilmente conterrà:
+1.  **Un container per lo storage** (es. MinIO, per simulare S3).
+2.  **Un container per il Catalog** (es. Project Nessie).
+
+**Entrambi questi componenti sono totalmente indipendenti dal linguaggio dell'applicazione.** Puoi cambiare l'app da Node.js a Python senza toccare minimamente
+la configurazione di MinIO o di Nessie, poiché entrambi espongono interfacce standard (S3 API e REST API) che qualsiasi linguaggio può utilizzare.
