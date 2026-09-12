@@ -1,0 +1,43 @@
+# .devcontainer/Dockerfile
+# syntax=docker/dockerfile:1
+
+FROM debian:bookworm-slim
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG USERNAME=dev
+ARG USER_UID=1000
+ARG USER_GID=1000
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc g++ \
+    clang clangd lldb lld \
+    gdb valgrind \
+    cmake ninja-build make \
+    pkg-config \
+    git git-lfs \
+    cppcheck clang-format clang-tidy \
+    python3 python3-pip \
+    rsync zip unzip tar xz-utils \
+    ca-certificates curl wget \
+    less vim nano file \
+    sudo locales tzdata \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --gid ${USER_GID} ${USERNAME} \
+ && useradd --uid ${USER_UID} --gid ${USER_GID} -m -s /bin/bash ${USERNAME} \
+ && usermod -aG sudo ${USERNAME} \
+ && echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} \
+ && chmod 0440 /etc/sudoers.d/${USERNAME}
+
+WORKDIR /workspace
+
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    CC=gcc \
+    CXX=g++ \
+    CMAKE_GENERATOR=Ninja
+
+USER ${USERNAME}
+
+CMD ["/bin/bash"]

@@ -12,7 +12,7 @@ PROJECT_DIR="$1"
 P_TYPE="$2"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-TEMPLATES_DIR="${SCRIPT_DIR}/langs/${P_TYPE}/.templates"
+TEMPLATES_DIR="${SCRIPT_DIR}/langs/${P_TYPE}/templates"
 
 if [[ ! -d "$TEMPLATES_DIR" ]]; then
     echo "[files] ERRORE: cartella template non trovata: $TEMPLATES_DIR" >&2

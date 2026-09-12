@@ -466,54 +466,19 @@ if [[ ! -f "$APPLY_TEMPLATES" ]]; then
 fi
 
 "$APPLY_TEMPLATES" "$PROJECT_DIR" "$P_TYPE"
-
-exit 1 # TEST
-
-
-#DOCKERFILE=~/.local/share/docker-dev/Dockerfile.$P_TYPE
-DOCKERFILE="Dockerfile.${P_TYPE}"
-TARGET_DOCKERFILE="${PROJECT_DIR}/Dockerfile"
-
-if [[ -f "$DOCKERFILE" ]]; then
-    if [[ -e "$TARGET_DOCKERFILE" ]]; then
-        echo "Skip Dockerfile.$P_TYPE copy"
-    else
-        cp -- "$DOCKERFILE" "$TARGET_DOCKERFILE"
-        echo "$P_TYPE Dockerfile copied"
-    fi
-    DOCKERFILE="$TARGET_DOCKERFILE"
-else
-    echo "ERROR: MISSING $DOCKERFILE, check installation"
-fi
-
-#ENTRYPOINT=~/.local/share/docker-dev/entrypoint.sh
-ENTRYPOINT="entrypoint.${P_TYPE}.sh"
-TARGET_ENTRYPOINT="${PROJECT_DIR}/entrypoint.sh"
-
-if [[ -f "$ENTRYPOINT" ]]; then
-    if [[ -e "$TARGET_ENTRYPOINT" ]]; then
-        echo "Skip entrypoint.$P_TYPE copy"
-    else
-        cp -- "$ENTRYPOINT" "$TARGET_ENTRYPOINT"
-        echo "$P_TYPE entrypoint copied"
-    fi
-    ENTRYPOINT="$TARGET_ENTRYPOINT"
-else
-    echo "ERROR: MISSING $ENTRYPOINT, check installation"
-fi
-
+#exit 1 # TEST
 
 cd "$PROJECT_DIR"
 
-# ---- Step 3.1: create (if not exist) venv volume and make it writable by UID/GID
-
+# create (if not exist) venv volume and make it writable by UID/GID (Python only)
+# TODO
 ensure_initialized_volume \
     "${VOLUME_NAME}" \
     "${APP_DIR_IN_CONTAINER}" \
     "mkdir -p '${APP_DIR_IN_CONTAINER}' && chown -R '${UID_}:${GID_}' '${APP_DIR_IN_CONTAINER}'"
 
-# ---- Step 3.2: create (if not exist) uv-python volume and make it writable by UID/GID
-# TODO: Python specific...
+# create (if not exist) uv-python volume and make it writable by UID/GID (Python only)
+# TODO
 ensure_initialized_volume \
     "uv-python" \
     "/uvpy" \
