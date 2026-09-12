@@ -135,11 +135,6 @@ ex_validate_project() {
     P_TARGET=${components[REP_INDEX + 1]}
     P_TYPE=${components[REP_INDEX + 2]}
 
-    #echo "...segue check_project_type..."
-    #if ! check_project_type "$P_TYPE"; then
-    #  exit 1
-    #fi
-
     # Format P_NAME to replace '-' with '_'
     P_NAME=${P_NAME//-/_}
 
@@ -181,8 +176,8 @@ is_valid() {
 
     #echo "$_tag [debug] $1"
 
-    # 1: Only allow a-zA-Z0-9-_/. characters
-    if [[ ! "$input" =~ ^[a-zA-Z0-9._/-]+$ ]]; then
+    # 1: Only allow a-zA-Z0-9-_+/. characters
+    if [[ ! "$input" =~ ^[a-zA-Z0-9._+/-]+$ ]]; then
         echo "$_tag Condition 1 FAIL"
         return 1
     fi
@@ -341,30 +336,6 @@ is_absolute() {
     return 1
 }
 
-check_project_type() {
-  #
-  # TODO rimuovere
-  #
-  local P_TYPE="$1" 
-  local FOUND=false
-  echo "project type=<$P_TYPE>"
-
-  for TYPE in "${MANAGED_P_TYPES[@]}"; do
-    if [[ "$P_TYPE" == "$TYPE" ]]; then
-      FOUND=true
-      break
-    fi
-  done
-
-  if [[ "$FOUND" == false ]]; then
-    local ALLOWED_TYPES=$(IFS=", "; echo "${MANAGED_P_TYPES[*]}")
-    echo "[init] Can manage the following projects only: $ALLOWED_TYPES."
-    return 1
-  fi
-  #echo "[init] Project type '$P_TYPE' is valid."
-  return 0
-}
-
 ##################################################################################################
 
 echo "Welcome to docker-dev"
@@ -452,8 +423,10 @@ GID_="${GID_:-$(id -g)}"
 # Default values for other variables
 #
 IMAGE_NAME="${IMAGE_NAME:-${P_NAME}}"
-CONTAINER_NAME="${CONTAINER_NAME:-${P_TARGET}.${P_NAME}}"
-VOLUME_NAME="${VOLUME_NAME:-venv.${P_TARGET}.${P_NAME}}"
+CONTAINER_NAME="${CONTAINER_NAME:-${P_TARGET}.${P_TYPE}.${P_NAME}}"
+
+# TODO: Python specific...
+VOLUME_NAME="${VOLUME_NAME:-venv.${P_TARGET}.${P_TYPE}.${P_NAME}}"
 
 echo "Image Name     : $IMAGE_NAME"
 echo "Container Name : $CONTAINER_NAME"
@@ -462,15 +435,15 @@ echo "Volume Name    : $VOLUME_NAME"
 # NOTA:
 # semplifico usando sempre /app al posto di $P_NAME (run manuali dei containers + uniformi)
 #
-#APP_DIR_IN_CONTAINER="/${P_NAME}" 
-#VENV_DIR_IN_CONTAINER="/${P_NAME}/.venv" 
 APP_DIR_IN_CONTAINER="/app" 
+
+# TODO: Python specific...
 VENV_DIR_IN_CONTAINER="/app/.venv" 
 
 DOCKER_RUN_EXTRA_ARGS="${DOCKER_RUN_EXTRA_ARGS:-"--rm -it"}"
 
-echo "APP_DIR_IN_CONTAINER  : $APP_DIR_IN_CONTAINER"
-echo "VENV_DIR_IN_CONTAINER : $VENV_DIR_IN_CONTAINER"
+#echo "APP_DIR_IN_CONTAINER  : $APP_DIR_IN_CONTAINER"
+#echo "VENV_DIR_IN_CONTAINER : $VENV_DIR_IN_CONTAINER" #TODO: Python specific...
 echo "TZ                    : $TZ"
 echo "USER                  : $USER_"
 echo "UID                   : $UID_"
@@ -484,55 +457,53 @@ if ! ask_to_proceed; then
   exit 1
 fi
 
-#check_docker
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+APPLY_TEMPLATES="${SCRIPT_DIR}/apply-templates.sh"
 
-#command -v uv >/dev/null 2>&1 || { echo "Errore: 'uv' non trovato nel PATH dell'host."; exit 1; }
-#echo "uv found..."
+if [[ ! -f "$APPLY_TEMPLATES" ]]; then
+    echo "[init] ERRORE: apply-templates.sh non trovato: $APPLY_TEMPLATES" >&2
+    exit 1
+fi
 
-echo "WARNING: COPIO DIRETTAMENTE Dockerfile.Python..."
+"$APPLY_TEMPLATES" "$PROJECT_DIR" "$P_TYPE"
+
+exit 1 # TEST
+
 
 #DOCKERFILE=~/.local/share/docker-dev/Dockerfile.$P_TYPE
-DOCKERFILE=Dockerfile.$P_TYPE
-if [[ -f $DOCKERFILE ]]; then
-  #echo "$DOCKERFILE --> ok"
-  #echo "copio in $PROJECT_DIR ..."
-  cp $DOCKERFILE $PROJECT_DIR/
-  DOCKERFILE="$PROJECT_DIR/Dockerfile.${P_TYPE}" ### !!!
-  echo "...Dockerfile --> $DOCKERFILE"
+DOCKERFILE="Dockerfile.${P_TYPE}"
+TARGET_DOCKERFILE="${PROJECT_DIR}/Dockerfile"
+
+if [[ -f "$DOCKERFILE" ]]; then
+    if [[ -e "$TARGET_DOCKERFILE" ]]; then
+        echo "Skip Dockerfile.$P_TYPE copy"
+    else
+        cp -- "$DOCKERFILE" "$TARGET_DOCKERFILE"
+        echo "$P_TYPE Dockerfile copied"
+    fi
+    DOCKERFILE="$TARGET_DOCKERFILE"
+else
+    echo "ERROR: MISSING $DOCKERFILE, check installation"
 fi
 
-echo "WARNING: COPIO DIRETTAMENTE entrypoint.sh..."
 #ENTRYPOINT=~/.local/share/docker-dev/entrypoint.sh
-ENTRYPOINT=entrypoint.Python.sh
-if [[ -f $ENTRYPOINT ]]; then
-  #echo "$ENTRYPOINT --> ok"
-  cp $ENTRYPOINT $PROJECT_DIR/
-  ENTRYPOINT="$PROJECT_DIR/entrypoint.${P_TYPE}.sh"
-  echo "...entrypoint --> $ENTRYPOINT"
+ENTRYPOINT="entrypoint.${P_TYPE}.sh"
+TARGET_ENTRYPOINT="${PROJECT_DIR}/entrypoint.sh"
+
+if [[ -f "$ENTRYPOINT" ]]; then
+    if [[ -e "$TARGET_ENTRYPOINT" ]]; then
+        echo "Skip entrypoint.$P_TYPE copy"
+    else
+        cp -- "$ENTRYPOINT" "$TARGET_ENTRYPOINT"
+        echo "$P_TYPE entrypoint copied"
+    fi
+    ENTRYPOINT="$TARGET_ENTRYPOINT"
+else
+    echo "ERROR: MISSING $ENTRYPOINT, check installation"
 fi
+
 
 cd "$PROJECT_DIR"
-
-# ---- Step 3.1: create (if not exist) venv volume and make it writable by UID/GID
-#
-#echo "[init] Activate docker volume ${VOLUME_NAME}"
-#docker volume create "${VOLUME_NAME}" >/dev/null
-#docker run --rm \
-#	-v "${VOLUME_NAME}:${APP_DIR_IN_CONTAINER}" \
-#	alpine:3.20 \
-#	sh -c "mkdir -p ${APP_DIR_IN_CONTAINER} && chown -R ${UID_}:${GID_} ${APP_DIR_IN_CONTAINER}" >/dev/null
-#
-# ---- Step 3.2: create (if not exist) uv-python volume iand make it writable by UID/GID
-#
-#echo "[init] Activate docker volume uv-python"
-#docker volume create uv-python >/dev/null
-#docker run --rm \
-#	-v uv-python:/uvpy \
-#	alpine:3.20 \
-#       sh -c "chown $UID_:$GID_ /uvpy" # change from ash to sh
-
-#echo "[ $(pwd)/Dockerfile ]"
-
 
 # ---- Step 3.1: create (if not exist) venv volume and make it writable by UID/GID
 
@@ -542,7 +513,7 @@ ensure_initialized_volume \
     "mkdir -p '${APP_DIR_IN_CONTAINER}' && chown -R '${UID_}:${GID_}' '${APP_DIR_IN_CONTAINER}'"
 
 # ---- Step 3.2: create (if not exist) uv-python volume and make it writable by UID/GID
-
+# TODO: Python specific...
 ensure_initialized_volume \
     "uv-python" \
     "/uvpy" \
@@ -579,6 +550,7 @@ echo "[init] Avvio container: ${CONTAINER_NAME}"
 # set -x
 if [ "${#CONTAINER_CMD[@]}" -gt 0 ]; then
   echo "[init] run container with arguments: < $ONE_LINE_CONTAINER_CMD>"
+  # TODO: Python specific...
   docker run ${DOCKER_RUN_EXTRA_ARGS} \
     --name "${CONTAINER_NAME}" \
     --hostname "${CONTAINER_NAME}" \

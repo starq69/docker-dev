@@ -1,0 +1,74 @@
+# -------------------------------------------------
+# Dockerfile.Python
+#
+# PASSED
+#
+# [ build.sh ]
+#
+# HOSTUSER=$USER
+# _UID="$(id -u $USER)"
+# _GID="$(id -g $USER)"
+# APP_DIR="/app"
+# VENV_DIR="${APP_DIR}/.venv"
+
+# docker build --build-arg HOSTUSER=$HOSTUSER --build-arg UID=$_UID --build-arg GID=$_GID -t pytest-01 -f Dockerfile .
+# echo "docker image [ pytest-01 ] done..."
+
+# echo "virtual env volume:"
+# docker volume create venv-pytest-01
+# docker run --rm -it -v venv-pytest-01:${VENV_DIR} alpine ash -c "chown $_UID:$_GID ${VENV_DIR}" # permessi utente
+# echo "docker volume [ venv-pytest-01 ] done."
+
+# echo "python interpreter volume:"
+# docker volume create uv-python
+# docker run --rm -it -v uv-python:/uvpy alpine ash -c "chown $_UID:$_GID /uvpy" # permessi utente
+# echo "docker volume [ uv-python ] done."
+
+# docker run --rm -it -p 8000:8000 \
+#	 --name test-myproject \
+#        -v $(pwd):/app \
+#        -v venv-myproject:/app/.venv \
+#        -v uv-python:/home/starq/.local/share/uv/python \
+#        -e UV_SYNC_ALWAYS=0 \
+#        myproject \
+#        bash
+
+# docker logs -f test-myproject
+# docker logs -f test-myproject &
+# docker logs --tail 100 test-myproject
+# docker exec -it test-myproject tail -f /dev/stdout
+# -------------------------------------------------
+FROM debian:trixie-slim
+
+COPY --from=ghcr.io/astral-sh/uv:0.10.5 /uv /uvx /bin/
+
+ARG HOSTUSER UID GID
+ARG APP_DIR=/app
+ENV TZ=Europe/Rome
+
+# Force uv to use system Python instead of downloading it
+ENV UV_LINK_MODE=copy
+
+# Force the build to fail if the auto-generated lock is not up to date
+#ENV UV_LOCKED=1
+
+RUN groupadd -g ${GID} ${HOSTUSER} && \
+    useradd -m -u ${UID} -g ${GID} ${HOSTUSER} && \
+    ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && \
+    echo $TZ > /etc/timezone && \
+    apt-get update && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+
+COPY entrypoint.Python.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+USER ${HOSTUSER}
+WORKDIR ${APP_DIR}
+ENV PATH="${APP_DIR}/.venv/bin:$PATH"
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+#CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
