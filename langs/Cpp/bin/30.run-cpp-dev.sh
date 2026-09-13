@@ -20,13 +20,11 @@ P_TARGET="$4"
 shift 4
 CONTAINER_CMD=("$@")
 
-# debug
-echo "...PROJECT_DIR=$PROJECT_DIR"
-echo "...PWD=$(pwd)"
-
 IMAGE_NAME="${IMAGE_NAME:-${P_TYPE}.${P_NAME}}"
 IMAGE_NAME="${IMAGE_NAME,,}"
 CONTAINER_NAME="${CONTAINER_NAME:-${P_TARGET}.${P_TYPE}.${P_NAME}}"
+
+APP_DIR_IN_CONTAINER='/app'
 
 USER_="${USER_:-$(id -un)}"
 #UID_="${UID_:-$(id -u)}"
@@ -41,11 +39,20 @@ fi
 
 echo "[run] Avvio container: ${CONTAINER_NAME}"
 
+#run_args=(
+#    --name "$CONTAINER_NAME"
+#    --hostname "$CONTAINER_NAME"
+#    -v "$(pwd)":"/home/$USER_/app":rw \
+#    -w "$(pwd)":"/home/$USER_/app" \
+#    "$IMAGE_NAME"
+#)
+
+
 run_args=(
     --name "$CONTAINER_NAME"
     --hostname "$CONTAINER_NAME"
-    -v "$(pwd)":"/home/$USER_/app":rw \
-    -w "$(pwd)":"/home/$USER_/app" \
+    -v "${PROJECT_DIR}":"${APP_DIR_IN_CONTAINER}":rw \
+    -w "${PROJECT_DIR}":"${APP_DIR_IN_CONTAINER}" \
     "$IMAGE_NAME"
 )
 

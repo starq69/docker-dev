@@ -117,8 +117,9 @@ run_lang_pipeline() {
         return 1
     fi
 
+    scripts_found=1
+
     for script in "${pipeline_scripts[@]}"; do
-        scripts_found=1
 
         if [[ ! -x "$script" ]]; then
             echo "[pipeline] ERRORE: script non eseguibile: $script" >&2
@@ -134,7 +135,6 @@ run_lang_pipeline() {
             "$p_name" \
             "$p_target" \
             "${container_cmd[@]}"
-
     done
 
     (( scripts_found == 1 ))
