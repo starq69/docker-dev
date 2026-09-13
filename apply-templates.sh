@@ -15,7 +15,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 TEMPLATES_DIR="${SCRIPT_DIR}/langs/${P_TYPE}/templates"
 
 if [[ ! -d "$TEMPLATES_DIR" ]]; then
-    echo "[files] ERRORE: cartella template non trovata: $TEMPLATES_DIR" >&2
+    echo "[files] ERROR: Missing template folder: $TEMPLATES_DIR" >&2
     exit 1
 fi
 
@@ -57,4 +57,6 @@ copy_tree_no_clobber() {
     done < <(find "$src_root" -type f -print0)
 }
 
+echo "[apply_templates] start..."
 copy_tree_no_clobber "$TEMPLATES_DIR" "$PROJECT_DIR"
+echo "[apply_templates] end"

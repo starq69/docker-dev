@@ -76,25 +76,68 @@ check_docker() {
     return 1
 }
 
-ensure_initialized_volume() {
-    local volume_name="$1"
-    local mount_path="$2"
-    local init_cmd="$3"
+run_lang_pipeline() {
+    local script_dir="$1"
+    local project_dir="$2"
+    local p_type="$3"
+    local p_name="$4"
+    local p_target="$5"
+    shift 5
 
-    if docker volume inspect "$volume_name" >/dev/null 2>&1; then
-        echo "[init] Docker volume già presente: ${volume_name}"
-        return 0
+    local container_cmd=("$@")
+    local lang_root
+    local bin_dir
+    local script
+    local scripts_found=0
+
+    echo "p_target=$p_target"
+
+    bin_dir="${script_dir}/langs/${p_type}/bin"
+
+    if [[ ! -d "$bin_dir" ]]; then
+        echo "[pipeline] ERROR: Missing /bin folder: $bin_dir" >&2
+        return 1
     fi
 
-    echo "[init] Creo e inizializzo Docker volume: ${volume_name}"
+    # Globbing disabilitato temporaneamente: se non esistono corrispondenze,
+    # il pattern resta letterale e può essere gestito esplicitamente.
+    local -a pipeline_scripts=()
+    while IFS= read -r -d '' script; do
+        pipeline_scripts+=("$script")
+    done < <(
+        find "$bin_dir" -maxdepth 1 -type f \
+            -regextype posix-extended \
+            -regex '.*/[0-9]+\..*\.sh' \
+            -print0 \
+        | sort -z -V
+    )
 
-    docker volume create "$volume_name" >/dev/null
+    if [[ "${#pipeline_scripts[@]}" -eq 0 ]]; then
+        echo "[pipeline] ERRORE: nessuno script pipeline trovato in: $bin_dir" >&2
+        return 1
+    fi
 
-    docker run --rm \
-        -v "${volume_name}:${mount_path}" \
-        alpine:3.20 \
-        sh -c "$init_cmd" \
-        >/dev/null
+    for script in "${pipeline_scripts[@]}"; do
+        scripts_found=1
+
+        if [[ ! -x "$script" ]]; then
+            echo "[pipeline] ERRORE: script non eseguibile: $script" >&2
+            echo "[pipeline] Eseguire: chmod +x -- '$script'" >&2
+            return 1
+        fi
+
+        echo "[pipeline] Eseguo: $(basename -- "$script")"
+
+	"$script" \
+            "$project_dir" \
+            "$p_type" \
+            "$p_name" \
+            "$p_target" \
+            "${container_cmd[@]}"
+
+    done
+
+    (( scripts_found == 1 ))
 }
 
 validate_project() {
@@ -412,38 +455,21 @@ USER_="${USER_:-$(id -un)}"
 UID_="${UID_:-$(id -u)}"
 GID_="${GID_:-$(id -g)}"
 
-#if [ -z "${PROJECT_DIR+x}" ]; then
-#  echo "[init] PROJECT_DIR IS NOT SET"
-#fi
-
-##PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
-##echo "[debug] project_dir=${PROJECT_DIR}"
-##ex_validate_project "$PROJECT_DIR"
-
 # Default values for other variables
 #
-IMAGE_NAME="${IMAGE_NAME:-${P_NAME}}"
+IMAGE_NAME="${IMAGE_NAME:-${P_TYPE}.${P_NAME}}"
 CONTAINER_NAME="${CONTAINER_NAME:-${P_TARGET}.${P_TYPE}.${P_NAME}}"
-
-# TODO: Python specific...
-VOLUME_NAME="${VOLUME_NAME:-venv.${P_TARGET}.${P_TYPE}.${P_NAME}}"
 
 echo "Image Name     : $IMAGE_NAME"
 echo "Container Name : $CONTAINER_NAME"
-echo "Volume Name    : $VOLUME_NAME"
 
 # NOTA:
 # semplifico usando sempre /app al posto di $P_NAME (run manuali dei containers + uniformi)
 #
 APP_DIR_IN_CONTAINER="/app" 
 
-# TODO: Python specific...
-VENV_DIR_IN_CONTAINER="/app/.venv" 
-
 DOCKER_RUN_EXTRA_ARGS="${DOCKER_RUN_EXTRA_ARGS:-"--rm -it"}"
 
-#echo "APP_DIR_IN_CONTAINER  : $APP_DIR_IN_CONTAINER"
-#echo "VENV_DIR_IN_CONTAINER : $VENV_DIR_IN_CONTAINER" #TODO: Python specific...
 echo "TZ                    : $TZ"
 echo "USER                  : $USER_"
 echo "UID                   : $UID_"
@@ -458,6 +484,7 @@ if ! ask_to_proceed; then
 fi
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+echo "[main] script_dir=$SCRIPT_DIR"
 APPLY_TEMPLATES="${SCRIPT_DIR}/apply-templates.sh"
 
 if [[ ! -f "$APPLY_TEMPLATES" ]]; then
@@ -466,72 +493,15 @@ if [[ ! -f "$APPLY_TEMPLATES" ]]; then
 fi
 
 "$APPLY_TEMPLATES" "$PROJECT_DIR" "$P_TYPE"
-#exit 1 # TEST
 
 cd "$PROJECT_DIR"
 
-# create (if not exist) venv volume and make it writable by UID/GID (Python only)
-# TODO
-ensure_initialized_volume \
-    "${VOLUME_NAME}" \
-    "${APP_DIR_IN_CONTAINER}" \
-    "mkdir -p '${APP_DIR_IN_CONTAINER}' && chown -R '${UID_}:${GID_}' '${APP_DIR_IN_CONTAINER}'"
-
-# create (if not exist) uv-python volume and make it writable by UID/GID (Python only)
-# TODO
-ensure_initialized_volume \
-    "uv-python" \
-    "/uvpy" \
-    "mkdir -p /uvpy && chown -R '${UID_}:${GID_}' /uvpy"
-
-# ---- Step 4: build image ----
-#
-if docker inspect --type=image "$IMAGE_NAME" > /dev/null 2>&1; then
-  echo "[init] Image ${IMAGE_NAME} already exists. Skipping build."
-else
-  echo "[init] Build image: ${IMAGE_NAME} with Dockerfile <$DOCKERFILE>"
-  docker build \
-    --build-arg "HOSTUSER=$USER_" \
-    --build-arg "UID=$UID_" \
-    --build-arg "GID=$GID_" \
-    --build-arg "TZ=$TZ" \
-    --build-arg "APP_DIR=$APP_DIR_IN_CONTAINER" \
-    -t "$IMAGE_NAME" \
-    -f $DOCKERFILE \
-    .
-fi
-
-# ---- Step 5: run container ----
-#
-if docker ps -a --format '{{.Names}}' | grep -qx "${CONTAINER_NAME}"; then
-  echo "[init] Rimuovo container esistente: ${CONTAINER_NAME}"
-  docker rm -f "${CONTAINER_NAME}" >/dev/null
-fi
-
-echo "[init] Avvio container: ${CONTAINER_NAME}"
-
-# NOTA: ${DOCKER_RUN_EXTRA_ARGS} senza "" evita espansione in ' ' se vuoto
-# debug
-# set -x
-if [ "${#CONTAINER_CMD[@]}" -gt 0 ]; then
-  echo "[init] run container with arguments: < $ONE_LINE_CONTAINER_CMD>"
-  # TODO: Python specific...
-  docker run ${DOCKER_RUN_EXTRA_ARGS} \
-    --name "${CONTAINER_NAME}" \
-    --hostname "${CONTAINER_NAME}" \
-    -v "${PROJECT_DIR}:${APP_DIR_IN_CONTAINER}" \
-    -v "${VOLUME_NAME}:${VENV_DIR_IN_CONTAINER}" \
-    -v "uv-python:/home/${USER_}/.local/share/uv/python" \
-    "${IMAGE_NAME}" \
+run_lang_pipeline \
+    "$SCRIPT_DIR" \
+    "$PROJECT_DIR" \
+    "$P_TYPE" \
+    "$P_NAME" \
+    "$P_TARGET" \
     "${CONTAINER_CMD[@]}"
-else
-  docker run ${DOCKER_RUN_EXTRA_ARGS} \
-    --name "${CONTAINER_NAME}" \
-    --hostname "${CONTAINER_NAME}" \
-    -v "${PROJECT_DIR}:${APP_DIR_IN_CONTAINER}" \
-    -v "${VOLUME_NAME}:${VENV_DIR_IN_CONTAINER}" \
-    -v "uv-python:/home/${USER_}/.local/share/uv/python" \
-    "${IMAGE_NAME}"
-fi
 
-exit 0
+exit 0 

@@ -1,4 +1,8 @@
 #!/bin/sh
+#
+# entrypoint.Python
+#
+
 set -eu
 
 APP_DIR="${APP_DIR:-/app}"

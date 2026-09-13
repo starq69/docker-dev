@@ -7,6 +7,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG USERNAME=dev
 ARG USER_UID=1000
 ARG USER_GID=1000
+ARG APP_DIR=/workspace
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -30,7 +31,11 @@ RUN groupadd --gid ${USER_GID} ${USERNAME} \
  && echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} \
  && chmod 0440 /etc/sudoers.d/${USERNAME}
 
-WORKDIR /workspace
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+USER ${USERNAME}
+WORKDIR ${APP_DIR}
 
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
@@ -38,6 +43,4 @@ ENV LANG=C.UTF-8 \
     CXX=g++ \
     CMAKE_GENERATOR=Ninja
 
-USER ${USERNAME}
-
-CMD ["/bin/bash"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

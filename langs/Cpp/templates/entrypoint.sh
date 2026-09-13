@@ -1,12 +1,11 @@
 #!/bin/sh
 set -eu
 
-#APP_DIR="${APP_DIR:-/app}"
-#cd "$APP_DIR"
-
+APP_DIR="${APP_DIR:-/workspace}"
+cd "$APP_DIR"
 
 echo "[entrypoint] $(id)"
-#echo "[entrypoint] APP_DIR=$APP_DIR"
+echo "[entrypoint] APP_DIR=$APP_DIR"
 echo "[entrypoint] to launch VSCode execute 'code .' from WSL project dir (not from container)"
 echo "[entrypoint] In VSCode: Ctrl+Shift+P then Dev Containers: Reopen in Container"
 echo "[entrypoint] To configure project: Ctrl+Shift+P → CMake: Configure"
