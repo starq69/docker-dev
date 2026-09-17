@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Bun entrypoint
+# Deno entrypoint
 #
 set -eu
 
