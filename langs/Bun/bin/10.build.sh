@@ -12,9 +12,10 @@ P_TARGET="$4"
 shift 4
 CONTAINER_CMD=("$@")
 
-# Derivati
-IMAGE_NAME="${IMAGE_NAME:-${P_TYPE}.${P_NAME}}"
-CONTAINER_NAME="${CONTAINER_NAME:-${P_TARGET}.${P_TYPE}.${P_NAME}}"
+IMAGE_NAME="${IMAGE_NAME:-${P_TARGET}.${P_TYPE}}"
+IMAGE_NAME="${IMAGE_NAME,,}"
+CONTAINER_NAME="${CONTAINER_NAME:-${IMAGE_NAME}.${P_NAME}}"
+#CONTAINER_NAME="${CONTAINER_NAME:-${P_TARGET}.${P_TYPE}.${P_NAME}}"
 
 # Host
 TZ="${TZ:-Europe/Rome}"
@@ -32,7 +33,7 @@ fi
 if docker inspect --type=image "$IMAGE_NAME" >/dev/null 2>&1; then
     echo "[build] Image ${IMAGE_NAME} already exists. Skipping build."
 else
-    echo "[build] Build image: ${IMAGE_NAME,,} with Dockerfile <$DOCKERFILE>"
+    echo "[build] Build image: ${IMAGE_NAME} with Dockerfile <$DOCKERFILE>"
 
     docker build \
 	--no-cache \
@@ -40,5 +41,5 @@ else
         --build-arg "HOSTUSER=${HOSTUSER}" \
         --build-arg "UID=${UID_}" \
         --build-arg "GID=${GID_}" \
-        -t "${IMAGE_NAME,,}" . 	
+        -t "${IMAGE_NAME}" . 	
 fi
