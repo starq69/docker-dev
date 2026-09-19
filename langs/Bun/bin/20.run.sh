@@ -43,7 +43,7 @@ run_args=(
     --name "$CONTAINER_NAME"
     --hostname "$CONTAINER_NAME"
     -v "${PROJECT_DIR}":"${APP_DIR_IN_CONTAINER}":rw \
-    -w "${PROJECT_DIR}":"${APP_DIR_IN_CONTAINER}" \
+    -w "${APP_DIR_IN_CONTAINER}" \
     "$IMAGE_NAME"
 )
 

@@ -24,13 +24,8 @@ IMAGE_NAME="${IMAGE_NAME:-${P_TYPE}.${P_NAME}}"
 IMAGE_NAME="${IMAGE_NAME,,}"
 CONTAINER_NAME="${CONTAINER_NAME:-${P_TARGET}.${P_TYPE}.${P_NAME}}"
 
-APP_DIR_IN_CONTAINER='/app'
-
-USER_="${USER_:-$(id -un)}"
-#UID_="${UID_:-$(id -u)}"
-#GID_="${GID_:-$(id -g)}"
-
 DOCKER_RUN_EXTRA_ARGS="${DOCKER_RUN_EXTRA_ARGS:---rm -it}"
+APP_DIR_IN_CONTAINER='/app'
 
 if docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
     echo "[run] Rimuovo container esistente: ${CONTAINER_NAME}"
@@ -39,20 +34,11 @@ fi
 
 echo "[run] Avvio container: ${CONTAINER_NAME}"
 
-#run_args=(
-#    --name "$CONTAINER_NAME"
-#    --hostname "$CONTAINER_NAME"
-#    -v "$(pwd)":"/home/$USER_/app":rw \
-#    -w "$(pwd)":"/home/$USER_/app" \
-#    "$IMAGE_NAME"
-#)
-
-
 run_args=(
     --name "$CONTAINER_NAME"
     --hostname "$CONTAINER_NAME"
     -v "${PROJECT_DIR}":"${APP_DIR_IN_CONTAINER}":rw \
-    -w "${PROJECT_DIR}":"${APP_DIR_IN_CONTAINER}" \
+    -w "${APP_DIR_IN_CONTAINER}" \
     "$IMAGE_NAME"
 )
 
