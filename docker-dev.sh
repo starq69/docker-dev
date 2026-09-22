@@ -457,7 +457,8 @@ echo "Container Name : $CONTAINER_NAME"
 #
 APP_DIR_IN_CONTAINER="/app" 
 
-DOCKER_RUN_EXTRA_ARGS="${DOCKER_RUN_EXTRA_ARGS:-"--rm -it"}"
+source "${SCRIPT_DIR}/docker-run-extra-args.sh"
+docker_run_extra_args "$PROJECT_DIR"
 
 echo "TZ                    : $TZ"
 echo "USER                  : $USER_"

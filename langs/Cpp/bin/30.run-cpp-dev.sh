@@ -23,7 +23,8 @@ CONTAINER_CMD=("$@")
 source "$(dirname -- "${BASH_SOURCE[0]}")/../../../docker-names.sh"
 docker_names
 
-DOCKER_RUN_EXTRA_ARGS="${DOCKER_RUN_EXTRA_ARGS:---rm -it}"
+source "$(dirname -- "${BASH_SOURCE[0]}")/../../../docker-run-extra-args.sh"
+docker_run_extra_args "$PROJECT_DIR"
 APP_DIR_IN_CONTAINER='/app'
 
 if docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then

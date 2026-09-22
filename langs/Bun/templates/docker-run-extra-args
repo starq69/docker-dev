@@ -1,0 +1,3 @@
+# Extra args for docker run. Allowed: any option EXCEPT --name and the
+# image reference (both generated). Env var DOCKER_RUN_EXTRA_ARGS overrides.
+--rm -it -p 3000:3000

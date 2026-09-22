@@ -22,7 +22,8 @@ USER_="${USER_:-$(id -un)}"
 UID_="${UID_:-$(id -u)}"
 GID_="${GID_:-$(id -g)}"
 
-DOCKER_RUN_EXTRA_ARGS="${DOCKER_RUN_EXTRA_ARGS:---rm -it}"
+source "$(dirname -- "${BASH_SOURCE[0]}")/../../../docker-run-extra-args.sh"
+docker_run_extra_args "$PROJECT_DIR"
 
 if docker ps -a --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
     echo "[run] Rimuovo container esistente: ${CONTAINER_NAME}"
