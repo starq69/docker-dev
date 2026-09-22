@@ -27,11 +27,10 @@ set -euo pipefail
 #MANAGED_P_TYPES=("Python" "Typescript" "Javascript")
 
 usage() {
-  echo "Usage: $0 [-d PROJECT_DIR] [-i IMAGE_NAME] [-c CONTAINER_NAME] [-v VOLUME_NAME]"
-  echo "  -d  Specify the project directory (default: current working directory)"
-  echo "  -i  Specify the docker image name" 
-  echo "  -c  Specify the docker container name" 
-  echo "  -v  Specify the docker volume name"
+  echo "Usage: $0 --target=<Type>/<name> [--penv=ENV] [-i IMAGE_NAME] [-- command...]"
+  echo "  --target  Project dir: relative <Type>/<name> under \$BASE or absolute existing path"
+  echo "  --penv    Project environment subdir (default: DEV)"
+  echo "  -i        Specify the docker image name"
   echo "  NON-Options arguments to be passed to docker run / entrypoint.sh"
   exit 1
 }
@@ -138,16 +137,6 @@ run_lang_pipeline() {
     done
 
     (( scripts_found == 1 ))
-}
-
-validate_project() {
-  local project="$1"
-  echo "[init] validate_project: $project"
-  if ! check_dir $project; then
-    echo "[init] WARNING: Match $project into $BASE ..."
-  else
-    echo "[init] existent project: $project"
-  fi
 }
 
 ex_validate_project() {
@@ -318,11 +307,6 @@ check() {
       return 1
     fi
   fi
-
-  echo "$_tag NEW: ex_validate_project() ...."
-  #ex_validate_project $PROJECT_DIR
-  #echo "debug exit"
-  #exit 1
 }
 
 create_relative_folder() {
@@ -388,7 +372,7 @@ validate_org;
 check_docker;
 
 _target=""
-_penv="DEV"
+_prj_env="DEV"
 _remaining_args=()
 
 for arg in "$@"; do
@@ -396,7 +380,7 @@ for arg in "$@"; do
         --target=*)
             _target="${arg#--target=}";;
         --penv=*)
-            _penv="${arg#--penv=}";;
+            _prj_env="${arg#--penv=}";;
         --help)
             usage;;
         *)
@@ -410,11 +394,11 @@ if [[ -z "$_target" ]]; then
 fi
 
 # Sostituisce gli argomenti originali con quelli rimasti:
-# -i, -c, -v, -h e argomenti posizionali
+# -i, -h e argomenti posizionali
 #
 set -- "${_remaining_args[@]}"
 
-if ! check "$_target" "$_penv"; then
+if ! check "$_target" "$_prj_env"; then
     echo "check() FAIL" >&2
     exit 1
 fi
@@ -425,14 +409,10 @@ ex_validate_project "$PROJECT_DIR"
 
 OPTIND=1
 
-while getopts ":i:c:v:h" opt; do
+while getopts ":i:h" opt; do
     case "$opt" in
         i)
             IMAGE_NAME="$OPTARG";;
-        c)
-            CONTAINER_NAME="$OPTARG";;
-        v)
-            VOLUME_NAME="$OPTARG";;
         h)
             usage;;
         :)
@@ -459,6 +439,9 @@ GID_="${GID_:-$(id -g)}"
 #
 IMAGE_NAME="${IMAGE_NAME:-${P_TYPE}.${P_NAME}}"
 CONTAINER_NAME="${CONTAINER_NAME:-${P_TARGET}.${P_TYPE}.${P_NAME}}"
+
+# export for /langs/*/bin childs scripts launched by run_lang_pipeline()
+export IMAGE_NAME CONTAINER_NAME
 
 echo "Image Name     : $IMAGE_NAME"
 echo "Container Name : $CONTAINER_NAME"
