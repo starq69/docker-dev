@@ -435,13 +435,15 @@ USER_="${USER_:-$(id -un)}"
 UID_="${UID_:-$(id -u)}"
 GID_="${GID_:-$(id -g)}"
 
-# Default values for other variables
-#
-IMAGE_NAME="${IMAGE_NAME:-${P_TYPE}.${P_NAME}}"
-CONTAINER_NAME="${CONTAINER_NAME:-${P_TARGET}.${P_TYPE}.${P_NAME}}"
+# Naming: single source of truth in langs/lib/docker-names.sh
+# (keeps IMAGE_NAME if set via -i, otherwise derives it from P_*)
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+source "${SCRIPT_DIR}/langs/lib/docker-names.sh"
+docker_names
 
-# export for /langs/*/bin childs scripts launched by run_lang_pipeline()
-export IMAGE_NAME CONTAINER_NAME
+# export for langs/*/bin child scripts launched by run_lang_pipeline()
+# (IMAGE_NAME only: CONTAINER_NAME is derived identically on both sides)
+export IMAGE_NAME
 
 echo "Image Name     : $IMAGE_NAME"
 echo "Container Name : $CONTAINER_NAME"
@@ -466,7 +468,6 @@ if ! ask_to_proceed; then
   exit 1
 fi
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 echo "[main] script_dir=$SCRIPT_DIR"
 APPLY_TEMPLATES="${SCRIPT_DIR}/apply-templates.sh"
 

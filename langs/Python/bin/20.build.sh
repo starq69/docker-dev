@@ -12,10 +12,8 @@ shift 4
 CONTAINER_CMD=("$@")
 
 # Derivati
-IMAGE_NAME="${IMAGE_NAME:-${P_TARGET}.${P_TYPE}}"
-IMAGE_NAME="${IMAGE_NAME,,}"
-CONTAINER_NAME="${CONTAINER_NAME:-${IMAGE_NAME}.${P_NAME}}"
-VOLUME_NAME="${VOLUME_NAME:-venv.${P_TARGET}.${P_TYPE}.${P_NAME}}"
+source "$(dirname -- "${BASH_SOURCE[0]}")/../../lib/docker-names.sh"
+docker_names venv
 
 # Costanti Python
 APP_DIR_IN_CONTAINER="/app"

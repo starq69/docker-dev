@@ -11,12 +11,9 @@ P_TARGET="$4"
 shift 4
 CONTAINER_CMD=("$@")
 
-IMAGE_NAME="${IMAGE_NAME:-${P_TARGET}.${P_TYPE}}"
-IMAGE_NAME="${IMAGE_NAME,,}"
-CONTAINER_NAME="${CONTAINER_NAME:-${IMAGE_NAME}.${P_NAME}}"
-VOLUME_NAME="${VOLUME_NAME:-local.${P_TARGET}.${P_TYPE}.${P_NAME}}"
+source "$(dirname -- "${BASH_SOURCE[0]}")/../../lib/docker-names.sh"
+docker_names local
 
-# Costanti Python
 APP_DIR_IN_CONTAINER="/app"
 VENV_DIR_IN_CONTAINER="/app/local"
 
