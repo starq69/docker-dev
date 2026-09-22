@@ -24,6 +24,8 @@
 ###############################################
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+
 #MANAGED_P_TYPES=("Python" "Typescript" "Javascript")
 
 usage() {
@@ -265,12 +267,12 @@ check() {
   echo "ORG : $ORG"
   echo "BASE: $BASE"
 
-  mapfile -t MANAGED_P_TYPES < <(find "$BASE" -maxdepth 1 -mindepth 1 -type d -printf '%f\n')
+  mapfile -t MANAGED_P_TYPES < <(find "$SCRIPT_DIR/langs" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' | sort)
   echo "Managed Project types:"
   local __TYPES=$(IFS=", "; echo "${MANAGED_P_TYPES[*]}")
   echo "    << $__TYPES >>"
 
-  _resolved="$(readlink -f "$1")" 
+  _resolved="$(readlink -m -- "$1")"
 
   if [[ -d "$_resolved" ]]; then
     if [[ -r "$_resolved" ]] && [[ -w "$_resolved" ]]; then
@@ -323,7 +325,16 @@ create_relative_folder() {
   #echo "$_tag p_type=${_p_type}"
   #echo "$_tag p_target=${_p_target}"
 
-  if [ ! -d "$BASE/$_p_type" ]; then  # readlink ?
+  local _type_ok=0
+  local _t
+  for _t in "${MANAGED_P_TYPES[@]}"; do
+    if [ "$_t" = "$_p_type" ]; then
+      _type_ok=1
+      break
+    fi
+  done
+
+  if [ "$_type_ok" -ne 1 ]; then
     echo "$_tag WARNING: $_p_type project type is NOT defined" >&2
     echo "$_tag Select one of the following project types:"
     local ALLOWED_TYPES=$(IFS=", "; echo "${MANAGED_P_TYPES[*]}")
@@ -434,7 +445,6 @@ GID_="${GID_:-$(id -g)}"
 
 # Naming: single source of truth in docker-names.sh
 # (keeps IMAGE_NAME if set via -i, otherwise derives it from P_*)
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 source "${SCRIPT_DIR}/docker-names.sh"
 docker_names
 
