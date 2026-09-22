@@ -25,6 +25,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+source "${SCRIPT_DIR}/docker-names.sh"
+source "${SCRIPT_DIR}/docker-run-extra-args.sh"
 
 #MANAGED_P_TYPES=("Python" "Typescript" "Javascript")
 
@@ -445,7 +447,6 @@ GID_="${GID_:-$(id -g)}"
 
 # Naming: single source of truth in docker-names.sh
 # (keeps IMAGE_NAME if set via -i, otherwise derives it from P_*)
-source "${SCRIPT_DIR}/docker-names.sh"
 docker_names
 
 # export for langs/*/bin child scripts launched by run_lang_pipeline()
@@ -460,7 +461,6 @@ echo "Container Name : $CONTAINER_NAME"
 #
 APP_DIR_IN_CONTAINER="/app" 
 
-source "${SCRIPT_DIR}/docker-run-extra-args.sh"
 docker_run_extra_args "$PROJECT_DIR"
 
 echo "TZ                    : $TZ"
