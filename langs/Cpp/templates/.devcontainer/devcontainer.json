@@ -1,7 +1,7 @@
 {
   "name": "C C++ Dev Debian",
   "build": {
-    "dockerfile": "Dockerfile",
+    "dockerfile": "Dockerfile.clang_gcc",
     "context": "..",
     "args": {
       "USERNAME": "${localEnv:USER}",

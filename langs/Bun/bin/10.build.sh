@@ -21,7 +21,7 @@ HOSTUSER="${HOSTUSER:-$(id -un)}"
 UID_="${UID_:-$(id -u)}"
 GID_="${GID_:-$(id -g)}"
 
-DOCKERFILE="${PROJECT_DIR}/Dockerfile.bun"
+DOCKERFILE="${PROJECT_DIR}/Dockerfile"
 
 if [[ ! -f "$DOCKERFILE" ]]; then
     echo "[build] ERRORE: Dockerfile non trovato: $DOCKERFILE" >&2
