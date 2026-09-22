@@ -12,7 +12,7 @@ shift 4
 CONTAINER_CMD=("$@")
 
 # Derivati
-source "$(dirname -- "${BASH_SOURCE[0]}")/../../lib/docker-names.sh"
+source "$(dirname -- "${BASH_SOURCE[0]}")/../../../docker-names.sh"
 docker_names venv
 
 # Costanti Python

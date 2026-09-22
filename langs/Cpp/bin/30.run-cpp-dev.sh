@@ -20,7 +20,7 @@ P_TARGET="$4"
 shift 4
 CONTAINER_CMD=("$@")
 
-source "$(dirname -- "${BASH_SOURCE[0]}")/../../lib/docker-names.sh"
+source "$(dirname -- "${BASH_SOURCE[0]}")/../../../docker-names.sh"
 docker_names
 
 DOCKER_RUN_EXTRA_ARGS="${DOCKER_RUN_EXTRA_ARGS:---rm -it}"

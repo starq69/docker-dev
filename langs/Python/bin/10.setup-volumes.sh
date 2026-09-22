@@ -15,7 +15,7 @@ echo "P_TYPE=$P_TYPE"
 echo "P_NAME=$P_NAME"
 echo "P_TARGET=$P_TARGET"
 
-source "$(dirname -- "${BASH_SOURCE[0]}")/../../lib/docker-names.sh"
+source "$(dirname -- "${BASH_SOURCE[0]}")/../../../docker-names.sh"
 docker_names venv
 
 echo "VOLUME_NAME=$VOLUME_NAME"

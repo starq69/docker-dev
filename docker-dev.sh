@@ -435,10 +435,10 @@ USER_="${USER_:-$(id -un)}"
 UID_="${UID_:-$(id -u)}"
 GID_="${GID_:-$(id -g)}"
 
-# Naming: single source of truth in langs/lib/docker-names.sh
+# Naming: single source of truth in docker-names.sh
 # (keeps IMAGE_NAME if set via -i, otherwise derives it from P_*)
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-source "${SCRIPT_DIR}/langs/lib/docker-names.sh"
+source "${SCRIPT_DIR}/docker-names.sh"
 docker_names
 
 # export for langs/*/bin child scripts launched by run_lang_pipeline()
