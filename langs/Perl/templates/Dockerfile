@@ -7,7 +7,7 @@ ENV TZ=Europe/Rome
 RUN groupadd -g ${GID} ${HOSTUSER} && \
     useradd -m -u ${UID} -g ${GID} ${HOSTUSER} && \
     ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && \
-    echo $TZ > /etc/timezone && \ 
+    echo $TZ > /etc/timezone && \
     apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     make \

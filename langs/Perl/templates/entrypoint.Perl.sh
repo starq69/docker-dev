@@ -22,7 +22,7 @@ echo "[entrypoint] VENV_DIR=$VENV_DIR"
 if check_venv; then
     if [ ! -f "cpanfile.snapshot" ] && [ -f "cpanfile" ]; then # (nuovo progetto)
 	echo "[entrypoint] carton install... "
-	carton install --deployment --without develop --without test
+	carton install --without develop --without test
     else
 	echo "[entrypoint] NON empty $VENV_DIR found --> skip carton install"
     fi
@@ -37,10 +37,15 @@ else
 	fi
 
 	#if [ ! -f "cpanfile.snapshot" ]; then  # (nuovo progetto)
-	if [ ! -f "cpanfile.snapshot" ] && [ -f "cpanfile" ]; then  # (nuovo progetto)
-	    echo "[entrypoint] This is a new project"
-	    echo "[entrypoint] icarton install..."
+	if [ -f "cpanfile.snapshot" ]; then
+	    echo "[entrypoint] snapshot found --> carton install --deployment"
 	    carton install --deployment --without develop --without test
+	elif [ -f "cpanfile" ]; then
+	    echo "[entrypoint] This is a new project"
+	    echo "[entrypoint] carton install..."
+	    carton install --without develop --without test
+	else
+	    echo "[entrypoint] WARNING: cpanfile not found, generate it and run 'carton install'"
 	fi
 
     elif [ "$ret" -eq 2 ]; then
