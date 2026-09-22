@@ -27,10 +27,11 @@ set -euo pipefail
 #MANAGED_P_TYPES=("Python" "Typescript" "Javascript")
 
 usage() {
-  echo "Usage: $0 --target=<Type>/<name> [--penv=ENV] [-i IMAGE_NAME] [-- command...]"
+  echo "Usage: $0 --target=<Type>/<name> [--penv=ENV] [-i IMAGE_NAME] [-o] [-- command...]"
   echo "  --target  Project dir: relative <Type>/<name> under \$BASE or absolute existing path"
   echo "  --penv    Project environment subdir (default: DEV)"
   echo "  -i        Specify the docker image name"
+  echo "  -o        Overwrite existing template files in the project folder"
   echo "  NON-Options arguments to be passed to docker run / entrypoint.sh"
   exit 1
 }
@@ -408,11 +409,14 @@ echo "[debug] project_dir=${PROJECT_DIR}"
 ex_validate_project "$PROJECT_DIR"
 
 OPTIND=1
+OVERWRITE=0
 
-while getopts ":i:h" opt; do
+while getopts ":i:oh" opt; do
     case "$opt" in
         i)
             IMAGE_NAME="$OPTARG";;
+        o)
+            OVERWRITE=1;;
         h)
             usage;;
         :)
@@ -476,7 +480,11 @@ if [[ ! -f "$APPLY_TEMPLATES" ]]; then
     exit 1
 fi
 
-"$APPLY_TEMPLATES" "$PROJECT_DIR" "$P_TYPE"
+if [[ "$OVERWRITE" -eq 1 ]]; then
+    "$APPLY_TEMPLATES" -o "$PROJECT_DIR" "$P_TYPE"
+else
+    "$APPLY_TEMPLATES" "$PROJECT_DIR" "$P_TYPE"
+fi
 
 cd "$PROJECT_DIR"
 

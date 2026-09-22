@@ -34,7 +34,6 @@ else
     echo "[build] Build image: ${IMAGE_NAME} with Dockerfile <$DOCKERFILE>"
 
     docker build \
-	--no-cache \
         -f "$DOCKERFILE" \
         --build-arg "HOSTUSER=${HOSTUSER}" \
         --build-arg "UID=${UID_}" \

@@ -5,8 +5,18 @@ set -euo pipefail
 # apply-templates.sh
 #
 # Argomenti:
+#   -o        (opzionale) sovrascrive i file già presenti nella destinazione
 #   $1 PROJECT_DIR
 #   $2 P_TYPE
+
+OVERWRITE=0
+while getopts ":o" opt; do
+    case "$opt" in
+        o)  OVERWRITE=1;;
+        \?) echo "[files] ERRORE: opzione non valida: -$OPTARG" >&2; exit 1;;
+    esac
+done
+shift $((OPTIND - 1))
 
 PROJECT_DIR="$1"
 P_TYPE="$2"
@@ -47,9 +57,13 @@ copy_tree_no_clobber() {
             mkdir -p -- "$dst_dir"
         fi
 
-        # Copia solo se il file di destinazione non esiste
         if [[ -e "$dst_file" ]]; then
-            echo "[files] Skip (già presente): $dst_file"
+            if [[ "$OVERWRITE" -eq 1 ]]; then
+                cp -- "$src_file" "$dst_file"
+                echo "[files] Sovrascritto: $dst_file"
+            else
+                echo "[files] Skip (già presente): $dst_file"
+            fi
         else
             cp -- "$src_file" "$dst_file"
             echo "[files] Copiato: $dst_file"
