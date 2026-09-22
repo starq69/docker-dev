@@ -150,7 +150,7 @@ ex_validate_project() {
   # Split PROJECT_DIR into components
   IFS='/' read -r -a components <<< "$__PROJECT_DIR"
   c_size=${#components[@]}
-  echo "$_tag [debug] c_size=${c_size}"
+  #echo "$_tag [debug] c_size=${c_size}"
 
   # Find the index of 'REP'
   REP_INDEX=-1
@@ -160,7 +160,7 @@ ex_validate_project() {
       break
     fi
   done
-  echo "$_tag [debug] TODO: check if if REP index <${REP_INDEX}> is last index!"
+  #echo "$_tag [debug] TODO: check if if REP index <${REP_INDEX}> is last index!"
 
   if [ $REP_INDEX -ne -1 ]; then
     # Extract project name, type, and target from PROJECT_DIR
@@ -206,8 +206,6 @@ is_valid() {
 
     local _tag="[is_valid]"
     local input="$1"
-
-    #echo "$_tag [debug] $1"
 
     # 1: Only allow a-zA-Z0-9-_+/. characters
     if [[ ! "$input" =~ ^[a-zA-Z0-9._+/-]+$ ]]; then
@@ -272,15 +270,10 @@ check() {
   local __TYPES=$(IFS=", "; echo "${MANAGED_P_TYPES[*]}")
   echo "    << $__TYPES >>"
 
-
   _resolved="$(readlink -f "$1")" 
-  echo "$_tag [debug] received=${1}"
-  echo "$_tag [debug] resolved=${_resolved}"
 
   if [[ -d "$_resolved" ]]; then
-    echo "$_tag [debug] -d pass"
     if [[ -r "$_resolved" ]] && [[ -w "$_resolved" ]]; then
-      echo "$_tag [debug] $1 - -r -w pass"
       PROJECT_DIR="$_resolved"
       #
       ### path assoluto a progetto esistente ###
@@ -327,8 +320,8 @@ create_relative_folder() {
   local _p_target="${_full_target#*/}"
 
   # debug
-  echo "$_tag p_type=${_p_type}"
-  echo "$_tag p_target=${_p_target}"
+  #echo "$_tag p_type=${_p_type}"
+  #echo "$_tag p_target=${_p_target}"
 
   if [ ! -d "$BASE/$_p_type" ]; then  # readlink ?
     echo "$_tag WARNING: $_p_type project type is NOT defined" >&2
@@ -405,7 +398,7 @@ if ! check "$_target" "$_prj_env"; then
 fi
 
 PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
-echo "[debug] project_dir=${PROJECT_DIR}"
+#echo "[debug] project_dir=${PROJECT_DIR}"
 ex_validate_project "$PROJECT_DIR"
 
 OPTIND=1

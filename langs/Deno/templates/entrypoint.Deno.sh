@@ -16,7 +16,6 @@ fi
 
 if [ -z "${1:-}" ]; then
     echo "[entrypoint] No command provided, using default command"
-    
     # full hostname in prompt 
     echo "export PS1='\u@\H:\w\$ '" > /tmp/custom_bashrc
     exec bash --rcfile /tmp/custom_bashrc -i

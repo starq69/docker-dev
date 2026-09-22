@@ -41,6 +41,6 @@ ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     CC=gcc \
     CXX=g++ \
-    CMAKE_GENERATOR=Ninja 
+    CMAKE_GENERATOR=Ninja
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
