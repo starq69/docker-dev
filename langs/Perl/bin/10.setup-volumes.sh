@@ -15,14 +15,18 @@ echo "P_TYPE=$P_TYPE"
 echo "P_NAME=$P_NAME"
 echo "P_TARGET=$P_TARGET"
 
+# Perl specific project-local-environment Path
+# 
+LOCAL_ENV_DIR="local"
+
 source "$(dirname -- "${BASH_SOURCE[0]}")/../../../docker-names.sh"
 docker_names local
 
 echo "VOLUME_NAME=$VOLUME_NAME"
 
-# Costanti Python
 APP_DIR_IN_CONTAINER="/app"
-VENV_DIR_IN_CONTAINER="/app/local"
+#VENV_DIR_IN_CONTAINER="/app/local"
+LOCAL_ENV_DIR_IN_CONTAINER="/app/${LOCAL_ENV_DIR}"
 
 # Host
 USER_="${USER_:-$(id -un)}"
