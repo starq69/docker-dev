@@ -5,17 +5,11 @@
 set -euo pipefail
 
 PROJECT_DIR="$1"
-P_TYPE="$2"
-P_NAME="$3"
-P_TARGET="$4"
-shift 4
+IMAGE_NAME="$2"
+CONTAINER_NAME="$3"
+shift 3
 CONTAINER_CMD=("$@")
 
-# Derivati
-source "$(dirname -- "${BASH_SOURCE[0]}")/../../../docker-names.sh"
-docker_names venv
-
-# Costanti Python
 APP_DIR_IN_CONTAINER="/app"
 VENV_DIR_IN_CONTAINER="/app/.venv"
 

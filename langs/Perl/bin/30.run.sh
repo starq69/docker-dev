@@ -1,26 +1,21 @@
 #!/usr/bin/env bash
 #
-# Perl run
+# Perl container runner
 #
 set -euo pipefail
 
 PROJECT_DIR="$1"
-P_TYPE="$2"
-P_NAME="$3"
-P_TARGET="$4"
-shift 4
+IMAGE_NAME="$2"
+CONTAINER_NAME="$3"
+shift 3
 CONTAINER_CMD=("$@")
 
-source "$(dirname -- "${BASH_SOURCE[0]}")/../../../docker-names.sh"
-docker_names local
-
+# Perl specific project-local-environment Path
+#
+LOCAL_ENV_DIR="local"
+VOLUME_NAME="${VOLUME_NAME:-${LOCAL_ENV_DIR}.${CONTAINER_NAME}}"
 APP_DIR_IN_CONTAINER="/app"
-VENV_DIR_IN_CONTAINER="/app/local"
-
-# Host
-USER_="${USER_:-$(id -un)}"
-UID_="${UID_:-$(id -u)}"
-GID_="${GID_:-$(id -g)}"
+LOCAL_ENV_DIR_IN_CONTAINER="/app/${LOCAL_ENV_DIR}"
 
 source "$(dirname -- "${BASH_SOURCE[0]}")/../../../docker-run-extra-args.sh"
 docker_run_extra_args "$PROJECT_DIR"
@@ -36,7 +31,7 @@ run_args=(
     --name "$CONTAINER_NAME"
     --hostname "$CONTAINER_NAME"
     -v "${PROJECT_DIR}:${APP_DIR_IN_CONTAINER}"
-    -v "${VOLUME_NAME}:${VENV_DIR_IN_CONTAINER}"
+    -v "${VOLUME_NAME}:${LOCAL_ENV_DIR_IN_CONTAINER}"
     "$IMAGE_NAME"
 )
 

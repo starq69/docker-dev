@@ -14,14 +14,10 @@
 set -euo pipefail
 
 PROJECT_DIR="$1"
-P_TYPE="$2"
-P_NAME="$3"
-P_TARGET="$4"
-shift 4
+IMAGE_NAME="$2"
+CONTAINER_NAME="$3"
+shift 3
 CONTAINER_CMD=("$@")
-
-source "$(dirname -- "${BASH_SOURCE[0]}")/../../../docker-names.sh"
-docker_names
 
 source "$(dirname -- "${BASH_SOURCE[0]}")/../../../docker-run-extra-args.sh"
 docker_run_extra_args "$PROJECT_DIR"

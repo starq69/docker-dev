@@ -25,7 +25,6 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-source "${SCRIPT_DIR}/docker-names.sh"
 source "${SCRIPT_DIR}/docker-run-extra-args.sh"
 
 #MANAGED_P_TYPES=("Python" "Typescript" "Javascript")
@@ -84,8 +83,8 @@ run_lang_pipeline() {
     local script_dir="$1"
     local project_dir="$2"
     local p_type="$3"
-    local p_name="$4"
-    local p_target="$5"
+    local image_name="$4"
+    local container_name="$5"
     shift 5
 
     local container_cmd=("$@")
@@ -93,8 +92,6 @@ run_lang_pipeline() {
     local bin_dir
     local script
     local scripts_found=0
-
-    echo "p_target=$p_target"
 
     bin_dir="${script_dir}/langs/${p_type}/bin"
 
@@ -123,6 +120,7 @@ run_lang_pipeline() {
 
     scripts_found=1
 
+
     for script in "${pipeline_scripts[@]}"; do
 
         if [[ ! -x "$script" ]]; then
@@ -135,9 +133,8 @@ run_lang_pipeline() {
 
 	"$script" \
             "$project_dir" \
-            "$p_type" \
-            "$p_name" \
-            "$p_target" \
+            "$image_name" \
+            "$container_name" \
             "${container_cmd[@]}"
     done
 
@@ -445,13 +442,17 @@ USER_="${USER_:-$(id -un)}"
 UID_="${UID_:-$(id -u)}"
 GID_="${GID_:-$(id -g)}"
 
-# Naming: single source of truth in docker-names.sh
-# (keeps IMAGE_NAME if set via -i, otherwise derives it from P_*)
-docker_names
-
-# export for langs/*/bin child scripts launched by run_lang_pipeline()
-# (IMAGE_NAME only: CONTAINER_NAME is derived identically on both sides)
-export IMAGE_NAME
+# Naming:
+# - IMAGE_NAME gia' impostata (opzione -i oppure export) -> mantenuta
+# - altrimenti                                            -> ${P_TARGET}.${P_TYPE}
+# IMAGE_NAME viene comunque lowercased (docker repo names reject uppercase)
+# e CONTAINER_NAME e' sempre derivata da essa.
+# VOLUME_NAME resta a carico dei langs/*/bin scripts:
+# prefisso di linguaggio + CONTAINER_NAME (override one-off via env).
+#
+IMAGE_NAME="${IMAGE_NAME:-${P_TARGET}.${P_TYPE}}"
+IMAGE_NAME="${IMAGE_NAME,,}"
+CONTAINER_NAME="${IMAGE_NAME}.${P_NAME}"
 
 echo "Image Name     : $IMAGE_NAME"
 echo "Container Name : $CONTAINER_NAME"
@@ -496,8 +497,8 @@ run_lang_pipeline \
     "$SCRIPT_DIR" \
     "$PROJECT_DIR" \
     "$P_TYPE" \
-    "$P_NAME" \
-    "$P_TARGET" \
+    "$IMAGE_NAME" \
+    "$CONTAINER_NAME" \
     "${CONTAINER_CMD[@]}"
 
 exit 0 

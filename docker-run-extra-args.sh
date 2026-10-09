@@ -9,6 +9,9 @@
 # The file may hold any docker run options EXCEPT --name and the image
 # reference (both are generated). Lines starting with '#' are ignored.
 #
+# TODO
+# spostare docker-run-extra-args sotto project_dir/.docker_container ?
+#
 docker_run_extra_args() {
     local project_dir="$1"
 

@@ -5,31 +5,22 @@
 set -euo pipefail
 
 PROJECT_DIR="$1"
-P_TYPE="$2"
-P_NAME="$3"
-P_TARGET="$4"
-shift 4
+IMAGE_NAME="$2"
+CONTAINER_NAME="$3"
+shift 3
 CONTAINER_CMD=("$@")
 
-echo "P_TYPE=$P_TYPE"
-echo "P_NAME=$P_NAME"
-echo "P_TARGET=$P_TARGET"
-
 # Perl specific project-local-environment Path
-# 
+#
 LOCAL_ENV_DIR="local"
 
-source "$(dirname -- "${BASH_SOURCE[0]}")/../../../docker-names.sh"
-docker_names local
-
-echo "VOLUME_NAME=$VOLUME_NAME"
+VOLUME_NAME="${VOLUME_NAME:-${LOCAL_ENV_DIR}.${CONTAINER_NAME}}"
 
 APP_DIR_IN_CONTAINER="/app"
-#VENV_DIR_IN_CONTAINER="/app/local"
-LOCAL_ENV_DIR_IN_CONTAINER="/app/${LOCAL_ENV_DIR}"
 
-# Host
-USER_="${USER_:-$(id -un)}"
+# Host User
+# Nota: meglio se ricevuti come parametri ?
+#
 UID_="${UID_:-$(id -u)}"
 GID_="${GID_:-$(id -g)}"
 

@@ -4,14 +4,13 @@
 #
 set -euo pipefail
 PROJECT_DIR="$1"
-P_TYPE="$2"
-P_NAME="$3"
-P_TARGET="$4"
-shift 4
+IMAGE_NAME="$2"
+CONTAINER_NAME="$3"
+shift 3
 CONTAINER_CMD=("$@")
 
-source "$(dirname -- "${BASH_SOURCE[0]}")/../../../docker-names.sh"
-docker_names deno_cache
+# Volume cache Deno: prefisso linguaggio + container name
+VOLUME_NAME="${VOLUME_NAME:-deno_cache.${CONTAINER_NAME}}"
 
 USER_="${USER_:-$(id -un)}"
 

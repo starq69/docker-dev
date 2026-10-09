@@ -1,21 +1,16 @@
 #!/usr/bin/env bash
 #
-# Perl build
+# Perl image builder 
 #
 set -euo pipefail
 
 PROJECT_DIR="$1"
-P_TYPE="$2"
-P_NAME="$3"
-P_TARGET="$4"
-shift 4
+IMAGE_NAME="$2"
+CONTAINER_NAME="$3"
+shift 3
 CONTAINER_CMD=("$@")
 
-source "$(dirname -- "${BASH_SOURCE[0]}")/../../../docker-names.sh"
-docker_names local
-
 APP_DIR_IN_CONTAINER="/app"
-VENV_DIR_IN_CONTAINER="/app/local"
 
 # Host
 TZ="${TZ:-Europe/Rome}"
@@ -30,6 +25,10 @@ if [[ ! -f "$DOCKERFILE" ]]; then
     exit 1
 fi
 
+# TODO:
+# evitare il check con docker inspect in quanto non permette la rigenerazione
+# dell'immagine se cambiano i layers
+#
 if docker inspect --type=image "$IMAGE_NAME" >/dev/null 2>&1; then
     echo "[build] Image ${IMAGE_NAME} already exists. Skipping build."
 else
