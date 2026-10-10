@@ -21,7 +21,6 @@ RUN cpanm -n Carton
 COPY entrypoint.Perl.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-#COPY cpanfile cpanfile.snapshot ./
 EXPOSE 3000
 
 ENV PERL5LIB="${APP_DIR}/local/lib/perl5"

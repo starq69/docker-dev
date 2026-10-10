@@ -6,7 +6,6 @@
 set -eu
 
 APP_DIR="${APP_DIR:-/app}"
-#VENV_DIR="${VENV_DIR:-$APP_DIR/local}"
 LOCAL_ENV_DIR="${LOCAL_ENV_DIR:-$APP_DIR/local}" ###
 
 cd "$APP_DIR"
