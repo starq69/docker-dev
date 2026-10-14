@@ -27,8 +27,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 source "${SCRIPT_DIR}/docker-run-extra-args.sh"
 
-#MANAGED_P_TYPES=("Python" "Typescript" "Javascript")
-
 usage() {
   echo "Usage: $0 --target=<Type>/<name> [--penv=ENV] [-i IMAGE_NAME] [-o] [-- command...]"
   echo "  --target  Project dir: relative <Type>/<name> under \$BASE or absolute existing path"
@@ -204,7 +202,7 @@ validate_org() {
 }
 
 is_valid() {
-
+  
     local _tag="[is_valid]"
     local input="$1"
 
@@ -238,6 +236,8 @@ is_valid() {
         return 1
     fi
 
+    # input contiene almeno 2 elementi separati da '/'
+    #
     return 0
 }
 
@@ -245,7 +245,7 @@ check_dir() {
   local _tag="[check_dir]"
   local _dir="$1"
   if [[ ! -d "$_dir" ]]; then
-    #echo "ERRORE: Invalid path [ $_dir ]"
+    # Invalid path
     return 1
   fi
   if [[ ! -w "$_dir" ]] || [[ ! -r "$_dir" ]]; then
@@ -256,9 +256,9 @@ check_dir() {
 }
 
 check() {
+
   local _tag="[check]"
 
-  #
   # aggiorna $BASE con il valore dell'argomento --penv ($2)
   #
   BASE="$BASE/$2"
@@ -275,9 +275,10 @@ check() {
 
   if [[ -d "$_resolved" ]]; then
     if [[ -r "$_resolved" ]] && [[ -w "$_resolved" ]]; then
-      PROJECT_DIR="$_resolved"
+      
+      # path assoluto a progetto esistente
       #
-      ### path assoluto a progetto esistente ###
+      PROJECT_DIR="$_resolved"
     else
       echo "$_tag missing rw permission on $_resolved"
       return 1
@@ -289,13 +290,11 @@ check() {
       echo "$_tag use relative path instead"
       return 1
     fi
-    echo "$_tag is_absolute() pass"
 
     if ! is_valid $1; then
       echo "$_tag $1 is NOT valid"
       return 1
     fi
-    echo "$_tag is_valid() pass"
 
     if ! create_relative_folder "$1"; then
       echo "$_tag Error creating $1" >&2
@@ -308,13 +307,11 @@ create_relative_folder() {
   #
   # _full_target : e' un project target relativo a ORG (es.: Python/foo corrisp. a $BASE/Python/foo)
   # _p_type      : e' un project type ammesso (es.: Python)
-  # _p_target    : e' un project target (es.: /foo)
+  # _p_target    : e' il project name (es.: /foo)
   #
   local _tag="[create_relative_folder]"
   local _full_target="$1"
 
-  # is_valid() garantisce che ci siano almeno 2 elementi separati da '/'
-  #
   IFS=/ read -r -a components <<< "$_full_target"
 
   local _p_type="${components[0]}"
@@ -324,19 +321,13 @@ create_relative_folder() {
   #echo "$_tag p_type=${_p_type}"
   #echo "$_tag p_target=${_p_target}"
 
-  local _type_ok=0
-  local _t
-  for _t in "${MANAGED_P_TYPES[@]}"; do
-    if [ "$_t" = "$_p_type" ]; then
-      _type_ok=1
-      break
-    fi
-  done
-
-  if [ "$_type_ok" -ne 1 ]; then
-    echo "$_tag WARNING: $_p_type project type is NOT defined" >&2
-    echo "$_tag Select one of the following project types:"
-    local ALLOWED_TYPES=$(IFS=", "; echo "${MANAGED_P_TYPES[*]}")
+  # managed project type ?
+  #
+  if ! is_managed_project_type "$_p_type"; then
+    echo "$_tag WARNING: Unknow project type $_p_type" >&2
+    echo "$_tag Select one of the following:"
+    local ALLOWED_TYPES
+    ALLOWED_TYPES=$(IFS=", "; echo "${MANAGED_P_TYPES[*]}")
     echo "$_tag $ALLOWED_TYPES"
     return 1
   fi
@@ -350,7 +341,8 @@ create_relative_folder() {
     fi
     PROJECT_DIR="$BASE/$_p_type/$_p_target"
   else
-    echo "$_tag WARNING: Missing project Name"
+    echo "$_tag ERROR: Missing project Name!"
+    echo "$tag DEBUG ${_full_target}"
     return 1
   fi
 
@@ -360,11 +352,26 @@ create_relative_folder() {
 is_absolute() {
   local _tag="[is_absolute]"
   if [[ "$1" =~ ^/ ]]; then
-    #echo "$_tag test : absolute path?"
+    # absolute path
     return 0
   fi
-    #echo "$_tag test: relative path?"
+    # relative path 
     return 1
+}
+
+is_managed_project_type() {
+  
+  # MANAGED_P_TYPES definita in check()
+  #
+  local p_type="$1"
+
+  for t in "${MANAGED_P_TYPES[@]}"; do
+    if [[ "$t" == "$p_type" ]]; then
+      return 0
+    fi
+  done
+
+  return 1
 }
 
 ##################################################################################################
