@@ -1,0 +1,82 @@
+A[Start: script docker-dev.sh] --> B[Carica SCRIPT_DIR e include docker-run-extra-args.sh]
+B --> C[validate_org()]
+C --> C1{ORG definita?}
+C1 -- Sì --> C2[BASE = $ORG/REP]
+C1 -- No --> C3[BASE = $HOME/REP]
+C2 --> C4[check_dir(BASE)]
+C3 --> C4
+C4 --> C5{Directory valida?}
+C5 -- No --> X[Errore: base non valida]
+C5 -- Sì --> D[check_docker()]
+
+D --> D1{docker installato?}
+D1 -- No --> X
+D1 -- Sì --> D2{Docker daemon raggiungibile?}
+D2 -- No --> X
+D2 -- Sì --> E[Parsing argomenti]
+
+E --> E1[--target=...]
+E --> E2[--penv=...]
+E --> E3[-i ...]
+E --> E4[-o]
+E --> E5[args extra per il container]
+
+E --> F[check()]
+F --> F1[BASE = BASE/$penv]
+F --> F2[Lista tipi supportati: langs/*]
+F --> F3[Risoluzione path target]
+F --> F4{Target esiste?}
+
+F4 -- Sì --> F5{Permessi rw validi?}
+F5 -- No --> X
+F5 -- Sì --> F6[PROJECT_DIR = path assoluto]
+F4 -- No --> F7{È assoluto?}
+F7 -- Sì --> X
+F7 -- No --> F8{is_valid(target)?}
+F8 -- No --> X
+F8 -- Yes --> F9[create_relative_folder(target)]
+F9 --> G[create_relative_folder()]
+
+G --> G1[Validazione tipo supportato]
+G1 --> G2{Tipo valido?}
+G2 -- No --> X
+G2 -- Sì --> G3[mkdir -p $BASE/<Tipo>/<Project>]
+G3 --> G4[PROJECT_DIR = $BASE/<Tipo>/<Project>]
+
+G4 --> H[ex_validate_project(PROJECT_DIR)]
+H --> H1[Analizza path]
+H1 --> H2[Trova "REP" nel percorso]
+H2 --> H3[Estrae P_NAME, P_TYPE, P_TARGET]
+
+H3 --> I[Impostazione Docker]
+I --> I1[IMAGE_NAME = -i o ${P_TARGET}.${P_TYPE}]
+I1 --> I2[lowercase]
+I2 --> I3[CONTAINER_NAME = ${IMAGE_NAME}.${P_NAME}]
+I3 --> I4[APP_DIR_IN_CONTAINER = /app]
+
+I4 --> J[docker_run_extra_args "$PROJECT_DIR"]
+J --> K[Riepilogo parametri]
+K --> L[ask_to_proceed()]
+L --> L1{Utente conferma?}
+L1 -- No --> X
+L1 -- Sì --> M[APPLY_TEMPLATES = apply-templates.sh]
+
+M --> M1{File esiste?}
+M1 -- No --> X
+M1 -- Sì --> M2{OVERWRITE = 1?}
+M2 -- Sì --> M3[apply-templates.sh -o PROJECT_DIR P_TYPE]
+M2 -- No --> M4[apply-templates.sh PROJECT_DIR P_TYPE]
+
+M3 --> N[cd PROJECT_DIR]
+M4 --> N
+N --> O[run_lang_pipeline()]
+
+O --> O1[bin_dir = langs/<P_TYPE>/bin]
+O1 --> O2{Esiste /bin?}
+O2 -- No --> X
+O2 -- Sì --> O3[find script numerati: [0-9]+.*.sh]
+O3 --> O4[Ordina per numero]
+O4 --> O5[Verifica eseguibilità]
+O5 --> O6[Per ogni script: esegui]
+O6 --> O7[Passa: project_dir, image_name, container_name, comandi container]
+O7 --> Z[Exit 0]
