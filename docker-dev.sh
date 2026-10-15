@@ -1,27 +1,16 @@
 #!/usr/bin/env bash
-###############################################
+#
+# v0.9
+#
+# --target=<Lang>/path/to/project es.: --target="Python/path/to/project"
+# oppure:
+# path assoluto a progetto esistente (con permessi utente rw)
+# --target="/home/user/REP/DEV/Python/baz"
 #
 # vedi:
-# - https://www.perplexity.ai/search/e-possibile-in-un-dockerfile-e-2oSS5RzdTC.AYy_JX1mIWQ
-# - exported as: Perplexity-thread-init_sh.md
-#
-# todo:
-# env variable ORG (ora corrisp. a <user>)
-# as-is:
-# /home/<user>/REP e' la root del repository
-#
-# -d /home/<user>/REP/Python/foo-project (la cartella deve esistere con permessi rw)
-#
-# hyp.:
-# -d /Python/new-project
-#
-# la validazione del progetto parte dalla ROOT /home/<user>/REP: 
-# ROOT/Python DEVE ESISTERE
-# quindi:
-# se ROOT/Python/new-project esiste, procede come in as-is
-# altrimenti crea la struttura del progetto e inizializza
-#
-###############################################
+# split PROJECT_DIR in project_identity()
+# MANAGED_MODELS in project_setup()
+
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -52,7 +41,7 @@ ask_to_proceed() {
 }
 
 check_docker() {
-    local tag="[docker-check]"
+    local tag="[check_docker]"
     local docker_error
 
     if ! command -v docker >/dev/null 2>&1; then
@@ -139,12 +128,14 @@ run_lang_pipeline() {
     (( scripts_found == 1 ))
 }
 
-ex_validate_project() {
+project_identity() {
   # 
-  # project setup
-  # 
+  # Split PROJECT_DIR into components &
+  # Extract project name, type, and target into P_NAME, P_TARGET, P_TYPE
+  # es.: PROJECT_DIR=/home/user/REP/DEV/Python/foo' -> P_NAME=foo, P_TARGET=DEV, P_TYPE=Python
+
   local __PROJECT_DIR="$1"
-  _tag="[ex_validate_project]"
+  _tag="[project_identity]"
 
   # Split PROJECT_DIR into components
   IFS='/' read -r -a components <<< "$__PROJECT_DIR"
@@ -174,9 +165,11 @@ ex_validate_project() {
     echo "Project Name   : $P_NAME"
     echo "Project Type   : $P_TYPE"	# Project Language...
     echo "Project Target : $P_TARGET"
+    return 0
   else
     echo "ERROR: 'REP' directory not found in path [ $PROJECT_DIR ]"
-    exit 1
+    #exit 1
+    return 1
   fi
 }
 
@@ -255,14 +248,14 @@ check_dir() {
   return 0
 }
 
-check() {
+project_setup() {
 
-  local _tag="[check]"
+  local _tag="[project_setup]"
 
-  local _target="$1"
-  IFS=/ read -r -a components <<< "$_target"
+  local _full_target="$1"
+  IFS=/ read -r -a components <<< "$_full_target"
   local _p_type="${components[0]}"
-  local _p_target="${_target#*/}"
+  local _p_target_folder="${_full_target#*/}"
 
   BASE="$BASE/$2"   # aggiorna $BASE con il valore dell'argomento --penv ($2)
 
@@ -283,11 +276,16 @@ check() {
   _resolved="$(readlink -m -- "$1")"
 
   if [[ -d "$_resolved" ]]; then
+    #
+    # --target= PATH assoluto
+    #
     if [[ -r "$_resolved" ]] && [[ -w "$_resolved" ]]; then
       
-      # path assoluto a progetto esistente
+      # permiessi rw -> PATH assoluto AMMESSO
       #
       PROJECT_DIR="$_resolved"
+      echo "$_tag PATH assoluto a progetto esistente: <$PROJECT_DIR>"
+
     else
       echo "$_tag missing rw permission on $_resolved"
       return 1
@@ -295,47 +293,54 @@ check() {
 
   else
 
+    # --target=<Lang>/path/to/project
+    #
     if ! is_managed_project_type "$_p_type"; then
-      echo "$_tag WARNING: Unknow project type $_p_type" >&2
+      echo "$_tag WARNING: Unknow Model $_p_type" >&2
       echo "$_tag Select one of the following:"
       echo "$_tag $_MODELS"
       return 1
     fi
 
-    if is_absolute "$1"; then
+    if is_absolute "_full_target"; then
       echo "$_tag cannot create new absolute path $1"
       echo "$_tag use relative path instead"
       return 1
     fi
 
-    if ! is_valid $1; then
+    if ! is_valid "_full_target"; then
       echo "$_tag $1 is NOT valid"
       return 1
     fi
 
-    if ! create_relative_folder "$_p_type" "$_p_target"; then
+    if ! create_relative_folder "$_p_type" "$_p_target_folder"; then
       echo "$_tag Error creating $1" >&2
       return 1
     fi
   fi
+
+  if ! project_identity "$PROJECT_DIR"; then
+    return 1
+  fi
+
 }
 
 create_relative_folder() {
 
   # _p_type      : e' un project type ammesso (es.: Python)
-  # _p_target    : e' il project name (es.: foo se --target='Python/foo')
+  # _p_target_folder    : e' il project name (es.: foo se --target='Python/foo')
   #
   local _p_type="$1"
-  local _p_target="$2"
+  local _p_target_folder="$2"
 
-  if [ -n "$_p_target" ]; then
-    if [ ! -d "$(readlink -f "$BASE/$_p_type/$_p_target")" ]; then  ### mkdir only if not exist
-      echo "$_tag mkdir -p $BASE/$_p_type/$_p_target"
-      mkdir -p "$BASE/$_p_type/$_p_target"
+  if [ -n "$_p_target_folder" ]; then
+    if [ ! -d "$(readlink -f "$BASE/$_p_type/$_p_target_folder")" ]; then  # mkdir only if not exist
+      echo "$_tag mkdir -p $BASE/$_p_type/$_p_target_folder"
+      mkdir -p "$BASE/$_p_type/$_p_target_folder"
     else
       echo "$_tag directory already exist"
     fi
-    PROJECT_DIR="$BASE/$_p_type/$_p_target"
+    PROJECT_DIR="$BASE/$_p_type/$_p_target_folder"
   else
     echo "$_tag ERROR: Missing project Name!"
     return 1
@@ -356,7 +361,8 @@ is_absolute() {
 
 is_managed_project_type() {
   
-  # MANAGED_MODELS definita in check()
+  # -> is_managed_model()
+  # MANAGED_MODELS definita in project_setup()
   #
   local p_type="$1"
 
@@ -375,7 +381,6 @@ echo "Welcome to docker-dev"
 
 ##################################################################################################
 validate_org;
-check_docker;
 
 _target=""
 _prj_env="DEV"
@@ -394,24 +399,22 @@ for arg in "$@"; do
     esac
 done
 
+check_docker;
+
 if [[ -z "$_target" ]]; then
-    echo "[init] missing --target argument" >&2
-    usage
+    _target="$(pwd)"
+    echo "[init] DEBUG: missing --target argument, fallback to current directory <$_target>"
+fi
+
+if ! project_setup "$_target" "$_prj_env"; then
+    echo "project_setup() FAIL" >&2
+    exit 1
 fi
 
 # Sostituisce gli argomenti originali con quelli rimasti:
 # -i, -h e argomenti posizionali
 #
 set -- "${_remaining_args[@]}"
-
-if ! check "$_target" "$_prj_env"; then
-    echo "check() FAIL" >&2
-    exit 1
-fi
-
-PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
-#echo "[debug] project_dir=${PROJECT_DIR}"
-ex_validate_project "$PROJECT_DIR"
 
 OPTIND=1
 OVERWRITE=0
