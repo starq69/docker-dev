@@ -259,17 +259,26 @@ check() {
 
   local _tag="[check]"
 
-  # aggiorna $BASE con il valore dell'argomento --penv ($2)
-  #
-  BASE="$BASE/$2"
+  local _target="$1"
+  IFS=/ read -r -a components <<< "$_target"
+  local _p_type="${components[0]}"
+  local _p_target="${_target#*/}"
+
+  BASE="$BASE/$2"   # aggiorna $BASE con il valore dell'argomento --penv ($2)
 
   echo "ORG : $ORG"
   echo "BASE: $BASE"
 
-  mapfile -t MANAGED_P_TYPES < <(find "$SCRIPT_DIR/langs" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' | sort)
-  echo "Managed Project types:"
-  local __TYPES=$(IFS=", "; echo "${MANAGED_P_TYPES[*]}")
-  echo "    << $__TYPES >>"
+  mapfile -t MANAGED_MODELS < <(
+    for _dir in "$SCRIPT_DIR/langs" "$SCRIPT_DIR/services" "$SCRIPT_DIR/stacks"; do
+      [[ -d "$_dir" ]] || continue
+      find "$_dir" -maxdepth 1 -mindepth 1 -type d -printf '%f\n'
+    done | sort
+  )
+  local _MODELS=$(IFS=", "; echo "${MANAGED_MODELS[*]}")
+  
+  echo "Managed Models :"  ### debug only
+  echo "    << $_MODELS >>"
 
   _resolved="$(readlink -m -- "$1")"
 
@@ -285,6 +294,14 @@ check() {
     fi
 
   else
+
+    if ! is_managed_project_type "$_p_type"; then
+      echo "$_tag WARNING: Unknow project type $_p_type" >&2
+      echo "$_tag Select one of the following:"
+      echo "$_tag $_MODELS"
+      return 1
+    fi
+
     if is_absolute "$1"; then
       echo "$_tag cannot create new absolute path $1"
       echo "$_tag use relative path instead"
@@ -296,7 +313,7 @@ check() {
       return 1
     fi
 
-    if ! create_relative_folder "$1"; then
+    if ! create_relative_folder "$_p_type" "$_p_target"; then
       echo "$_tag Error creating $1" >&2
       return 1
     fi
@@ -304,33 +321,12 @@ check() {
 }
 
 create_relative_folder() {
-  #
-  # _full_target : e' un project target relativo a ORG (es.: Python/foo corrisp. a $BASE/Python/foo)
+
   # _p_type      : e' un project type ammesso (es.: Python)
-  # _p_target    : e' il project name (es.: /foo)
+  # _p_target    : e' il project name (es.: foo se --target='Python/foo')
   #
-  local _tag="[create_relative_folder]"
-  local _full_target="$1"
-
-  IFS=/ read -r -a components <<< "$_full_target"
-
-  local _p_type="${components[0]}"
-  local _p_target="${_full_target#*/}"
-
-  # debug
-  #echo "$_tag p_type=${_p_type}"
-  #echo "$_tag p_target=${_p_target}"
-
-  # managed project type ?
-  #
-  if ! is_managed_project_type "$_p_type"; then
-    echo "$_tag WARNING: Unknow project type $_p_type" >&2
-    echo "$_tag Select one of the following:"
-    local ALLOWED_TYPES
-    ALLOWED_TYPES=$(IFS=", "; echo "${MANAGED_P_TYPES[*]}")
-    echo "$_tag $ALLOWED_TYPES"
-    return 1
-  fi
+  local _p_type="$1"
+  local _p_target="$2"
 
   if [ -n "$_p_target" ]; then
     if [ ! -d "$(readlink -f "$BASE/$_p_type/$_p_target")" ]; then  ### mkdir only if not exist
@@ -342,7 +338,6 @@ create_relative_folder() {
     PROJECT_DIR="$BASE/$_p_type/$_p_target"
   else
     echo "$_tag ERROR: Missing project Name!"
-    echo "$tag DEBUG ${_full_target}"
     return 1
   fi
 
@@ -361,11 +356,11 @@ is_absolute() {
 
 is_managed_project_type() {
   
-  # MANAGED_P_TYPES definita in check()
+  # MANAGED_MODELS definita in check()
   #
   local p_type="$1"
 
-  for t in "${MANAGED_P_TYPES[@]}"; do
+  for t in "${MANAGED_MODELS[@]}"; do
     if [[ "$t" == "$p_type" ]]; then
       return 0
     fi
