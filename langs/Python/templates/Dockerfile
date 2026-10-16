@@ -1,43 +1,5 @@
-# -------------------------------------------------
 # Dockerfile.Python
-#
-# PASSED
-#
-# [ build.sh ]
-#
-# HOSTUSER=$USER
-# _UID="$(id -u $USER)"
-# _GID="$(id -g $USER)"
-# APP_DIR="/app"
-# VENV_DIR="${APP_DIR}/.venv"
 
-# docker build --build-arg HOSTUSER=$HOSTUSER --build-arg UID=$_UID --build-arg GID=$_GID -t pytest-01 -f Dockerfile .
-# echo "docker image [ pytest-01 ] done..."
-
-# echo "virtual env volume:"
-# docker volume create venv-pytest-01
-# docker run --rm -it -v venv-pytest-01:${VENV_DIR} alpine ash -c "chown $_UID:$_GID ${VENV_DIR}" # permessi utente
-# echo "docker volume [ venv-pytest-01 ] done."
-
-# echo "python interpreter volume:"
-# docker volume create uv-python
-# docker run --rm -it -v uv-python:/uvpy alpine ash -c "chown $_UID:$_GID /uvpy" # permessi utente
-# echo "docker volume [ uv-python ] done."
-
-# docker run --rm -it -p 8000:8000 \
-#	 --name test-myproject \
-#        -v $(pwd):/app \
-#        -v venv-myproject:/app/.venv \
-#        -v uv-python:/home/starq/.local/share/uv/python \
-#        -e UV_SYNC_ALWAYS=0 \
-#        myproject \
-#        bash
-
-# docker logs -f test-myproject
-# docker logs -f test-myproject &
-# docker logs --tail 100 test-myproject
-# docker exec -it test-myproject tail -f /dev/stdout
-# -------------------------------------------------
 FROM debian:trixie-slim
 
 COPY --from=ghcr.io/astral-sh/uv:0.10.5 /uv /uvx /bin/
