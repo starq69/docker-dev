@@ -14,6 +14,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+source "${SCRIPT_DIR}/docker-dev-cli.sh"
 source "${SCRIPT_DIR}/docker-run-extra-args.sh"
 
 usage() {
@@ -376,6 +377,30 @@ is_managed_project_type() {
 }
 
 ##################################################################################################
+
+if ! ddev_cli_parse "$@"; then
+    printf '[cli] ERROR: %s\n' "$DDEV_PARSE_ERROR" >&2
+    case "$DDEV_OPERATION" in
+        build) ddev_cli_build_usage >&2 ;;
+        run) ddev_cli_run_usage >&2 ;;
+        *) ddev_cli_usage >&2 ;;
+    esac
+    exit 2
+fi
+
+if [[ "$DDEV_OPERATION" != legacy ]]; then
+    if [[ "$DDEV_SHOW_HELP" -eq 1 ]]; then
+        case "$DDEV_OPERATION" in
+            build) ddev_cli_build_usage ;;
+            run) ddev_cli_run_usage ;;
+        esac
+        exit 0
+    fi
+
+    printf '[cli] ERROR: subcommand "%s" is not wired to an operation yet.\n' \
+        "$DDEV_OPERATION" >&2
+    exit 2
+fi
 
 echo "Welcome to docker-dev"
 

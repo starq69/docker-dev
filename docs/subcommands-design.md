@@ -4,7 +4,7 @@
 
 Documento di progettazione per il branch `subcommands`. Specifica il comportamento atteso dei subcomandi `build` e `run`, il dispatch, la risoluzione dei progetti, i metadati necessari e il piano di verifica. Non modifica la CR rev. 2, che potrà essere integrata successivamente.
 
-Questo documento descrive il design approvato per i requisiti concordati; non descrive funzionalità già implementate. Le decisioni ancora raccomandate, ma non approvate, sono indicate come tali.
+Questo documento descrive il design approvato per i requisiti concordati. Il parsing e il riconoscimento iniziale dei subcomandi sono implementati; il dispatch operativo, la risoluzione dei target, i tag e i flussi build/run sono ancora da implementare. Le decisioni ancora raccomandate, ma non approvate, sono indicate come tali.
 
 ### Decisioni approvate
 
