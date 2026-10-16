@@ -376,6 +376,151 @@ is_managed_project_type() {
   return 1
 }
 
+ddev_set_explicit_project_identity() {
+    local project_dir="$1"
+    local lang="$2"
+    local repo_root
+    local repo_relative
+
+    P_NAME="$(basename -- "$project_dir" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/_/g')"
+    P_NAME="${P_NAME//-/_}"
+    P_TYPE="$lang"
+    P_TARGET="DEV"
+
+    repo_root="$(readlink -m -- "${ORG}/REP")"
+    case "$project_dir" in
+        "${repo_root}/"*)
+            repo_relative="${project_dir#"${repo_root}"/}"
+            if [[ "$repo_relative" == */* ]]; then
+                P_TARGET="${repo_relative%%/*}"
+            fi
+            ;;
+    esac
+
+    IMAGE_NAME="${IMAGE_NAME:-${P_TARGET}.${P_TYPE}}"
+    IMAGE_NAME="${IMAGE_NAME,,}"
+    CONTAINER_NAME="${IMAGE_NAME}.${P_NAME}"
+}
+
+ddev_run_explicit_command() {
+    local operation="$DDEV_OPERATION"
+    local project_base
+    local resolver_status=0
+    local apply_templates="${SCRIPT_DIR}/apply-templates.sh"
+
+    ORG="${ORG:-$HOME}"
+    BASE="${ORG}/REP"
+    project_base="${BASE}/DEV"
+
+    if [[ "$operation" == build ]]; then
+        if ! ddev_cli_is_managed_language "$SCRIPT_DIR" "$DDEV_LANG"; then
+            echo "[build] ERROR: unknown or unmanaged language: $DDEV_LANG" >&2
+            return 2
+        fi
+        if [[ -n "$DDEV_TARGET" && "$DDEV_TARGET" != /* ]]; then
+            if ! ddev_cli_validate_relative_target "$DDEV_TARGET"; then
+                echo "[build] ERROR: $DDEV_RESOLVE_ERROR" >&2
+                return 2
+            fi
+        fi
+        if ! ddev_resolve_build_project "$SCRIPT_DIR" "$project_base" "$DDEV_LANG" "$DDEV_TARGET"; then
+            echo "[build] ERROR: $DDEV_RESOLVE_ERROR" >&2
+            return 1
+        fi
+    else
+        ddev_resolve_run_project "$SCRIPT_DIR" "$project_base" "$DDEV_TARGET" || resolver_status=$?
+        if [[ "$resolver_status" -ne 0 ]]; then
+            if [[ "$resolver_status" -eq 2 ]]; then
+                printf '[run] ERROR: %s\n' "$DDEV_RESOLVE_ERROR" >&2
+                return 2
+            fi
+            printf '[run] ERROR: %s\n' "$DDEV_RESOLVE_ERROR" >&2
+            return 1
+        fi
+    fi
+
+    PROJECT_DIR="$DDEV_PROJECT_DIR"
+    DDEV_PROJECT_LANG="$DDEV_PROJECT_LANG"
+    P_TYPE="$DDEV_PROJECT_LANG"
+    ddev_set_explicit_project_identity "$PROJECT_DIR" "$P_TYPE"
+
+    echo "Project Folder : $PROJECT_DIR"
+    echo "Project Type   : $P_TYPE"
+    echo "Project Target : $P_TARGET"
+    echo "Image Name     : $IMAGE_NAME"
+    echo "Container Name : $CONTAINER_NAME"
+
+    if ! check_docker; then
+        return 1
+    fi
+
+    if [[ "$operation" == run ]]; then
+        if ! docker inspect --type=image "$IMAGE_NAME" >/dev/null 2>&1; then
+            echo "[run] ERROR: image '$IMAGE_NAME' is not available locally." >&2
+            printf '[run] Build it first with: docker-dev build --lang %q --target %q\n' \
+                "$P_TYPE" "$PROJECT_DIR" >&2
+            return 1
+        fi
+    fi
+
+    if [[ "$operation" == build ]]; then
+        if [[ "$DDEV_ASSUME_YES" -ne 1 ]] && ! ask_to_proceed; then
+            echo "Exiting..."
+            return 1
+        fi
+        if [[ ! -f "$apply_templates" ]]; then
+            echo "[build] ERROR: apply-templates.sh not found: $apply_templates" >&2
+            return 1
+        fi
+        if ! mkdir -p -- "$PROJECT_DIR"; then
+            echo "[build] ERROR: cannot create project directory: $PROJECT_DIR" >&2
+            return 1
+        fi
+
+        if ! "$apply_templates" "$PROJECT_DIR" "$P_TYPE"; then
+            echo "[build] ERROR: template application failed for: $PROJECT_DIR" >&2
+            return 1
+        fi
+        if ! cd "$PROJECT_DIR"; then
+            echo "[build] ERROR: cannot enter project directory: $PROJECT_DIR" >&2
+            return 1
+        fi
+        if ! ddev_run_lang_operation \
+            "$SCRIPT_DIR" "$PROJECT_DIR" "$P_TYPE" "$IMAGE_NAME" "$CONTAINER_NAME" build; then
+            echo "[build] ERROR: ${DDEV_RESOLVE_ERROR:-language setup/build failed}" >&2
+            return 1
+        fi
+        if ! ddev_write_project_tag "$PROJECT_DIR" "$P_TYPE" "$SCRIPT_DIR"; then
+            echo "[build] ERROR: $DDEV_RESOLVE_ERROR" >&2
+            return 1
+        fi
+        echo "[build] Project tag written: ${PROJECT_DIR}/.docker-dev/project-tag"
+
+        if [[ "$DDEV_BUILD_AND_RUN" -eq 1 ]]; then
+            if ! ddev_run_lang_operation \
+                "$SCRIPT_DIR" "$PROJECT_DIR" "$P_TYPE" "$IMAGE_NAME" "$CONTAINER_NAME" run-only; then
+                echo "[run] ERROR: ${DDEV_RESOLVE_ERROR:-language run failed}" >&2
+                return 1
+            fi
+        fi
+        return 0
+    fi
+
+    if ! ask_to_proceed; then
+        echo "Exiting..."
+        return 1
+    fi
+    if ! cd "$PROJECT_DIR"; then
+        echo "[run] ERROR: cannot enter project directory: $PROJECT_DIR" >&2
+        return 1
+    fi
+    if ! ddev_run_lang_operation \
+        "$SCRIPT_DIR" "$PROJECT_DIR" "$P_TYPE" "$IMAGE_NAME" "$CONTAINER_NAME" run; then
+        echo "[run] ERROR: ${DDEV_RESOLVE_ERROR:-language run failed}" >&2
+        return 1
+    fi
+}
+
 ##################################################################################################
 
 if ! ddev_cli_parse "$@"; then
@@ -397,9 +542,8 @@ if [[ "$DDEV_OPERATION" != legacy ]]; then
         exit 0
     fi
 
-    printf '[cli] ERROR: subcommand "%s" is not wired to an operation yet.\n' \
-        "$DDEV_OPERATION" >&2
-    exit 2
+    ddev_run_explicit_command || exit $?
+    exit 0
 fi
 
 echo "Welcome to docker-dev"

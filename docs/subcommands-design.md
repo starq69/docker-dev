@@ -4,14 +4,14 @@
 
 Documento di progettazione per il branch `subcommands`. Specifica il comportamento atteso dei subcomandi `build` e `run`, il dispatch, la risoluzione dei progetti, i metadati necessari e il piano di verifica. Non modifica la CR rev. 2, che potrà essere integrata successivamente.
 
-Questo documento descrive il design approvato per i requisiti concordati. Il parsing dei subcomandi e gli helper di risoluzione progetto/tag sono implementati e testati; il collegamento di tali helper ai flussi operativi build/run e la selezione degli step di pipeline restano da implementare. Le decisioni ancora raccomandate, ma non approvate, sono indicate come tali.
+Questo documento descrive il design approvato per i requisiti concordati. Il parsing, gli helper di risoluzione progetto/tag e i flussi operativi `build`/`run` sono implementati e testati con Docker simulato. La guida utente definitiva e la verifica su Docker reale restano da completare.
 
 ### Decisioni approvate
 
 - Mantenere temporaneamente il dispatch legacy senza subcomando, con comportamento attuale e avviso.
 - Accettare target assoluti per `build` e `run`, rispettando il tag del progetto.
 - Usare il tag testuale `.docker-dev/project-tag` con `schema_version` e `lang`.
-- Se `run --target` relativo corrisponde a più progetti, fallire indicando tutte le alternative. Per selezionarne una, ripetere il comando con il percorso assoluto del progetto scelto.
+- `run --target` relativo cerca esclusivamente sotto `$PWD`; se il target non esiste lì, fallisce senza ricerca globale.
 
 ## 1. Specifica CLI e compatibilità
 
@@ -70,25 +70,11 @@ Nei comandi espliciti, `BASE` nella formula `$BASE/$lang/$target` indica la radi
 
 - Senza `--target`, il progetto è `$PWD`; il linguaggio è determinato dal tag file valido nella directory.
 - Con un target assoluto, la directory indicata è il progetto esatto e il linguaggio è letto dal suo tag file.
-- Con un target relativo, cercare `$BASE/<lang>/<target>` per ogni linguaggio gestito. Non scegliere arbitrariamente se esistono più progetti validi: terminare con errore e stampare tutti i percorsi candidati. Non avviare una selezione interattiva.
-- Per selezionare un candidato, ripetere il comando usando il suo percorso assoluto come target. Per esempio, se la ricerca segnala:
+- Con un target relativo, cercare esclusivamente `$PWD/<target>`. Se la directory non esiste, terminare subito con un errore che indichi il percorso cercato; non cercare sotto `$BASE` o nelle altre root linguaggio.
+- Se `$PWD/<target>` esiste, usarla anche se esistono progetti omonimi in altre root. Il linguaggio si legge dal tag valido; per mantenere utilizzabili progetti legacy senza tag, se la directory corrente è dentro una root linguaggio gestita sotto `$BASE`, inferire il linguaggio da tale root. Se il tag è presente ma non valido o contraddice la root linguaggio, fallire esplicitamente.
+- Un progetto esterno alla root di un linguaggio gestito deve avere un tag valido. Un target che deve selezionare una directory specifica fuori da `$PWD` va passato come percorso assoluto; `run` legge da quella directory il tag e il linguaggio.
 
-  ```text
-  /home/alice/REP/DEV/Python/foo/bar
-  /home/alice/REP/DEV/Perl/foo/bar
-  ```
-
-  l'utente sceglie il progetto Python ripetendo:
-
-  ```bash
-  docker-dev run --target /home/alice/REP/DEV/Python/foo/bar
-  ```
-
-  Il target assoluto identifica una sola directory; `run` legge da quella directory il tag e il linguaggio. Non è necessario aggiungere `--lang` a `run`.
-- Se non si trova alcuna directory candidata, terminare con errore indicando il target e i linguaggi/percorso base cercati.
-- Se una directory candidata esiste ma ha tag mancante o non valido, non avviare il run; riportare il percorso e il motivo. La diagnostica deve distinguere questi casi dall'assenza del progetto.
-
-Il target deve essere convalidato per impedire che componenti come `..` facciano uscire da `$BASE/$lang`. I percorsi devono essere normalizzati prima di confrontare candidati o validare la directory.
+Il target relativo deve essere convalidato per impedire che componenti come `..` facciano uscire da `$PWD`. I percorsi devono essere normalizzati prima di controllare e validare la directory.
 
 ### Tag file del progetto
 
@@ -137,12 +123,12 @@ run:
   carica e valida il tag
   verifica i prerequisiti di run, inclusa la disponibilità dell'immagine
   chiede conferma
-  esegue solo gli step necessari al run; non esegue build
+  esegue gli step setup necessari al run e poi il run; non esegue build
 ```
 
 `run` deve fallire con un messaggio operativo se l'immagine necessaria non è disponibile; non deve avviare implicitamente `build`. Il messaggio può suggerire il comando `docker-dev build --lang <lang> --target <target>`.
 
-Il flusso di run non deve ripetere setup o build salvo prerequisiti che siano strettamente necessari al run e separabili dalla build. La pipeline numerata corrente esegue gli script in sequenza; l'implementazione dovrà introdurre una selezione esplicita degli step o un dispatcher equivalente, evitando di affidarsi all'ordine numerico per rappresentare implicitamente le operazioni.
+Gli script setup sono eseguiti anche da `run` perché inizializzano i volumi necessari al container e sono prerequisiti separabili dalla build; non sono rieseguiti tra build e run nella singola operazione `build -x`. Il run non richiama mai script di build. La pipeline numerata corrente esegue gli script in sequenza; il dispatcher esplicito seleziona le fasi per nome e garantisce l'ordine setup → build → run, mantenendo l'ordinamento numerico all'interno di ogni fase.
 
 ### Verifiche richieste
 
@@ -152,10 +138,10 @@ Il flusso di run non deve ripetere setup o build salvo prerequisiti che siano st
 | Compatibilità | L'invocazione legacy non cambia comportamento durante la transizione; l'assenza di subcomando non viene confusa con `run`. |
 | Build e tag | Tag creato solo dopo build riuscita; nessun tag parziale se fallisce; tag aggiornato atomicamente; `-x` non esegue run se setup/build fallisce. |
 | Default target | `build` e `run` senza target usano `$PWD`; `run` ricava il linguaggio dal tag. |
-| Target relativo | `build --lang Python --target foo/bar` risolve in `$BASE/Python/foo/bar`; `run --target foo/bar` cerca sotto ogni linguaggio gestito. |
+| Target relativo | `build --lang Python --target foo/bar` risolve in `$BASE/Python/foo/bar`; `run --target foo/bar` risolve esclusivamente `$PWD/foo/bar` e fallisce senza ricerca se manca. |
 | Target assoluto | Directory esistente e tag validi; directory inesistente o non accessibile; linguaggio del tag valido. |
-| Tag | Tag mancante, schema non supportato, linguaggio sconosciuto, campo duplicato/mancante/vuoto, mismatch tra tag e directory. |
-| Ambiguità | Più candidati validi: errore non interattivo con elenco completo; nessun container avviato; percorso assoluto seleziona un solo candidato. |
+| Tag | Tag mancante, schema non supportato, linguaggio sconosciuto, campo duplicato/mancante/vuoto, mismatch tra tag e directory; progetto legacy locale senza tag sotto una root linguaggio valida. |
+| Target run assente | Il target manca sotto `$PWD` ma esiste sotto un'altra root linguaggio: errore immediato, nessuna ricerca globale e nessuna invocazione Docker. |
 | No build implicita | `run` con immagine assente fallisce e suggerisce `build`, senza invocare gli script di build o mutare lo stato. |
 | Ordine | Verificare tramite stub/mocking che `build` esegua setup prima di build e che il run eventuale venga dopo tag/build. |
 
@@ -191,16 +177,15 @@ La guida d'uso dovrà inoltre spiegare:
 
 - il formato e la posizione del tag, quando viene creato e come diagnosticare un tag non valido;
 - che `run` non costruisce l'immagine e non scrive il tag;
-- come vengono risolti target assenti, relativi e assoluti;
-- l'errore in caso di più candidati, includendo i percorsi trovati e il modo previsto per selezionarne uno senza ambiguità;
+- come vengono risolti target assenti, relativi e assoluti, precisando che un target relativo di `run` non viene cercato fuori da `$PWD`;
 - la compatibilità transitoria e l'avviso associato alla sintassi legacy;
 - gli errori CLI con esempi d'uso corretti e codici di uscita significativi.
 
 ## Sequenza di lavoro suggerita
 
 1. Dispatch e parsing isolabili, con test del contratto CLI (implementati).
-2. Risoluzione target/tag e test di errore, inclusa l'ambiguità (helper implementati; integrazione operativa da completare).
-3. Separare e collaudare i flussi build/run; verificare che run non costruisca.
-4. Scrivere/aggiornare la guida utente sui comportamenti effettivamente collaudati.
+2. Risoluzione target/tag e test di errore, inclusa la priorità del target locale (implementati).
+3. Flussi build/run, con verifica che `run` non costruisca e test dell'ordine setup/build/run (implementati con Docker simulato).
+4. Scrivere/aggiornare la guida utente sui comportamenti effettivamente collaudati e completare una verifica con Docker reale.
 
 I commit dovrebbero seguire unità coerenti e verificabili, non singole micro-modifiche: dispatch/CLI, risoluzione e tag, flussi/test, documentazione finale. La CR rev. 2 resta fuori perimetro fino alla successiva integrazione concordata.

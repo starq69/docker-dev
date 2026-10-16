@@ -207,8 +207,8 @@ ddev_resolve_build_project() {
         DDEV_RESOLVE_ERROR="unknown or unmanaged language: $lang"
         return 1
     fi
-    if [[ "$base" != /* || ! -d "$base" ]]; then
-        DDEV_RESOLVE_ERROR="project base must be an existing absolute directory: $base"
+    if [[ "$base" != /* ]]; then
+        DDEV_RESOLVE_ERROR="project base must be an absolute directory: $base"
         return 1
     fi
     resolved_base="$(readlink -m -- "$base")"
@@ -358,16 +358,13 @@ ddev_resolve_run_project() {
     local script_dir="$1"
     local base="$2"
     local target="$3"
-    local resolved_base
     local candidate
+    local resolved_base
     local resolved_candidate
+    local resolved_pwd
+    local local_lang=""
+    local local_tag_file
     local lang
-    local index
-    local invalid_candidates=()
-    local -a candidate_paths=()
-    local -a candidate_langs=()
-    local -a valid_paths=()
-    local -a valid_langs=()
 
     DDEV_PROJECT_DIR=""
     DDEV_PROJECT_LANG=""
@@ -415,57 +412,162 @@ ddev_resolve_run_project() {
     fi
 
     resolved_base="$(readlink -m -- "$base")"
+    resolved_pwd="$(readlink -m -- "$PWD")"
+
     for lang in "${DDEV_LANGUAGES[@]}"; do
-        candidate="${resolved_base}/${lang}/${target}"
-        [[ -d "$candidate" ]] || continue
-        resolved_candidate="$(readlink -m -- "$candidate")"
-        case "$resolved_candidate" in
-            "${resolved_base}/${lang}/"*) ;;
+        case "$resolved_pwd" in
+            "${resolved_base}/${lang}"|"${resolved_base}/${lang}/"*)
+                local_lang="$lang"
+                break
+                ;;
+        esac
+    done
+
+    candidate="${resolved_pwd}/${target}"
+    if [[ ! -d "$candidate" ]]; then
+        DDEV_RESOLVE_ERROR="target '$target' does not exist under the current directory: $candidate"
+        return 1
+    fi
+    resolved_candidate="$(readlink -m -- "$candidate")"
+    case "$resolved_candidate" in
+        "${resolved_pwd}/"*) ;;
+        *)
+            DDEV_RESOLVE_ERROR="local target resolves outside the current directory: $candidate"
+            return 1
+            ;;
+    esac
+    if [[ ! -r "$resolved_candidate" ]]; then
+        DDEV_RESOLVE_ERROR="local target is not a readable directory: $resolved_candidate"
+        return 1
+    fi
+
+    local_tag_file="${resolved_candidate}/.docker-dev/project-tag"
+    if [[ -e "$local_tag_file" || -L "$local_tag_file" ]]; then
+        if ! ddev_read_project_tag "$resolved_candidate" "$script_dir"; then
+            return 1
+        fi
+        if [[ -n "$local_lang" && "$DDEV_TAG_LANG" != "$local_lang" ]]; then
+            DDEV_RESOLVE_ERROR="project tag language '$DDEV_TAG_LANG' does not match current language directory '$local_lang': $resolved_candidate"
+            return 1
+        fi
+        DDEV_PROJECT_LANG="$DDEV_TAG_LANG"
+    elif [[ -n "$local_lang" ]]; then
+        DDEV_PROJECT_LANG="$local_lang"
+    else
+        DDEV_RESOLVE_ERROR="project tag is missing and the language cannot be inferred from the current directory: $local_tag_file"
+        return 1
+    fi
+
+    DDEV_PROJECT_DIR="$resolved_candidate"
+}
+
+ddev_run_lang_operation() {
+    local script_dir="$1"
+    local project_dir="$2"
+    local lang="$3"
+    local image_name="$4"
+    local container_name="$5"
+    local operation="$6"
+    shift 6
+
+    local bin_dir="${script_dir}/langs/${lang}/bin"
+    local script
+    local filename
+    local phase
+    local index
+    local found_build=0
+    local found_run=0
+    local -a scripts=()
+    local -a phases=()
+    local -a requested_phases=()
+    local -a container_cmd=("$@")
+
+    DDEV_RESOLVE_ERROR=""
+
+    case "$operation" in
+        build) requested_phases=(setup build) ;;
+        run) requested_phases=(setup run) ;;
+        run-only) requested_phases=(run) ;;
+        *)
+            DDEV_RESOLVE_ERROR="unknown language operation: $operation"
+            return 1
+            ;;
+    esac
+
+    if [[ ! -d "$bin_dir" ]]; then
+        DDEV_RESOLVE_ERROR="language pipeline directory not found: $bin_dir"
+        return 1
+    fi
+
+    while IFS= read -r -d '' script; do
+        scripts+=("$script")
+    done < <(
+        find "$bin_dir" -maxdepth 1 -type f \
+            -regextype posix-extended \
+            -regex '.*/[0-9]+\..*\.sh' \
+            -print0 \
+        | sort -z -V
+    )
+
+    if ((${#scripts[@]} == 0)); then
+        DDEV_RESOLVE_ERROR="no numbered pipeline scripts found in: $bin_dir"
+        return 1
+    fi
+
+    for script in "${scripts[@]}"; do
+        filename="${script##*/}"
+        filename="${filename,,}"
+        case "$filename" in
+            *setup*|*volume*) phase=setup ;;
+            *build*) phase=build ;;
+            *run*) phase=run ;;
             *)
-                DDEV_RESOLVE_ERROR="candidate resolves outside its language directory: $candidate"
+                DDEV_RESOLVE_ERROR="cannot classify pipeline script '$script' as setup, build, or run"
                 return 1
                 ;;
         esac
-        candidate_paths+=("$resolved_candidate")
-        candidate_langs+=("$lang")
+        phases+=("$phase")
+        if [[ "$phase" == build ]]; then
+            found_build=1
+        elif [[ "$phase" == run ]]; then
+            found_run=1
+        fi
     done
 
-    if ((${#candidate_paths[@]} == 0)); then
-        DDEV_RESOLVE_ERROR="no project found for target '$target' under any managed language in $resolved_base"
-        return 1
+    if [[ "$operation" == build ]]; then
+        if [[ "$found_build" -eq 0 ]]; then
+            DDEV_RESOLVE_ERROR="no build script found for language '$lang'"
+            return 1
+        fi
+    fi
+    if [[ "$operation" == run || "$operation" == run-only ]]; then
+        if [[ "$found_run" -eq 0 ]]; then
+            DDEV_RESOLVE_ERROR="no run script found for language '$lang'"
+            return 1
+        fi
     fi
 
-    for index in "${!candidate_paths[@]}"; do
-        if ! ddev_read_project_tag "${candidate_paths[index]}" "$script_dir"; then
-            invalid_candidates+=("${candidate_paths[index]}: ${DDEV_RESOLVE_ERROR}")
-            continue
-        fi
-        if [[ "$DDEV_TAG_LANG" != "${candidate_langs[index]}" ]]; then
-            invalid_candidates+=("${candidate_paths[index]}: tag language '$DDEV_TAG_LANG' does not match '${candidate_langs[index]}'")
-            continue
-        fi
-        valid_paths+=("${candidate_paths[index]}")
-        valid_langs+=("${candidate_langs[index]}")
+    for requested_phase in "${requested_phases[@]}"; do
+        for index in "${!scripts[@]}"; do
+            [[ "${phases[index]}" == "$requested_phase" ]] || continue
+            script="${scripts[index]}"
+            if [[ ! -x "$script" ]]; then
+                DDEV_RESOLVE_ERROR="pipeline script is not executable: $script"
+                return 1
+            fi
+
+            printf '[pipeline] Running %s\n' "${script##*/}"
+            if "$script" \
+                "$project_dir" \
+                "$image_name" \
+                "$container_name" \
+                "${container_cmd[@]}"; then
+                :
+            else
+                local script_status=$?
+                DDEV_RESOLVE_ERROR="pipeline script failed (${script_status}): $script"
+                return "$script_status"
+            fi
+        done
     done
-
-    if ((${#invalid_candidates[@]})); then
-        DDEV_RESOLVE_ERROR="one or more target candidates have missing or invalid project tags:"
-        for candidate in "${invalid_candidates[@]}"; do
-            DDEV_RESOLVE_ERROR+=$'\n'"  $candidate"
-        done
-        return 1
-    fi
-
-    if ((${#valid_paths[@]} > 1)); then
-        DDEV_RESOLVE_AMBIGUOUS=1
-        DDEV_CANDIDATE_PATHS=("${valid_paths[@]}")
-        DDEV_RESOLVE_ERROR="target '$target' matches multiple projects; repeat the command with one absolute path:"
-        for candidate in "${valid_paths[@]}"; do
-            DDEV_RESOLVE_ERROR+=$'\n'"  $candidate"
-        done
-        return 2
-    fi
-
-    DDEV_PROJECT_DIR="${valid_paths[0]}"
-    DDEV_PROJECT_LANG="${valid_langs[0]}"
 }
