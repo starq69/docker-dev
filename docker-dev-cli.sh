@@ -140,3 +140,332 @@ ddev_cli_parse() {
         return 2
     fi
 }
+
+ddev_cli_load_languages() {
+    local script_dir="$1"
+    local lang_dir="${script_dir}/langs"
+
+    DDEV_LANGUAGES=()
+    if [[ ! -d "$lang_dir" ]]; then
+        DDEV_RESOLVE_ERROR="language directory not found: $lang_dir"
+        return 1
+    fi
+
+    mapfile -t DDEV_LANGUAGES < <(
+        find "$lang_dir" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort
+    )
+    if ((${#DDEV_LANGUAGES[@]} == 0)); then
+        DDEV_RESOLVE_ERROR="no managed languages found in: $lang_dir"
+        return 1
+    fi
+}
+
+ddev_cli_is_managed_language() {
+    local script_dir="$1"
+    local lang="$2"
+
+    [[ "$lang" =~ ^[A-Za-z0-9_-]+$ && -d "${script_dir}/langs/${lang}" ]]
+}
+
+ddev_cli_validate_relative_target() {
+    local target="$1"
+    local component
+    local -a components=()
+
+    if [[ -z "$target" || "$target" == /* || ! "$target" =~ ^[A-Za-z0-9._+/-]+$ ]]; then
+        DDEV_RESOLVE_ERROR="target must be a non-empty relative path containing only letters, digits, '.', '_', '+', '-', and '/'"
+        return 1
+    fi
+
+    if [[ "$target" == */ || "$target" == *//* ]]; then
+        DDEV_RESOLVE_ERROR="target must not contain empty path components: $target"
+        return 1
+    fi
+
+    IFS='/' read -r -a components <<< "$target"
+    for component in "${components[@]}"; do
+        if [[ "$component" == "." || "$component" == ".." ]]; then
+            DDEV_RESOLVE_ERROR="target must not contain '.' or '..' path components: $target"
+            return 1
+        fi
+    done
+}
+
+ddev_resolve_build_project() {
+    local script_dir="$1"
+    local base="$2"
+    local lang="$3"
+    local target="$4"
+    local resolved_base
+    local resolved_project
+
+    DDEV_PROJECT_DIR=""
+    DDEV_PROJECT_LANG=""
+    DDEV_RESOLVE_ERROR=""
+
+    if ! ddev_cli_is_managed_language "$script_dir" "$lang"; then
+        DDEV_RESOLVE_ERROR="unknown or unmanaged language: $lang"
+        return 1
+    fi
+    if [[ "$base" != /* || ! -d "$base" ]]; then
+        DDEV_RESOLVE_ERROR="project base must be an existing absolute directory: $base"
+        return 1
+    fi
+    resolved_base="$(readlink -m -- "$base")"
+
+    if [[ -z "$target" ]]; then
+        resolved_project="$(readlink -m -- "$PWD")"
+        if [[ ! -d "$resolved_project" || ! -r "$resolved_project" || ! -w "$resolved_project" ]]; then
+            DDEV_RESOLVE_ERROR="current directory must be an existing readable and writable project directory: $resolved_project"
+            return 1
+        fi
+    elif [[ "$target" == /* ]]; then
+        resolved_project="$(readlink -m -- "$target")"
+        if [[ ! -d "$resolved_project" || ! -r "$resolved_project" || ! -w "$resolved_project" ]]; then
+            DDEV_RESOLVE_ERROR="absolute target must be an existing readable and writable directory: $resolved_project"
+            return 1
+        fi
+    else
+        if ! ddev_cli_validate_relative_target "$target"; then
+            return 1
+        fi
+        resolved_project="$(readlink -m -- "${resolved_base}/${lang}/${target}")"
+        case "$resolved_project" in
+            "${resolved_base}/${lang}/"*) ;;
+            *)
+                DDEV_RESOLVE_ERROR="target resolves outside the language project directory: $target"
+                return 1
+                ;;
+        esac
+    fi
+
+    DDEV_PROJECT_DIR="$resolved_project"
+    DDEV_PROJECT_LANG="$lang"
+}
+
+ddev_read_project_tag() {
+    local project_dir="$1"
+    local script_dir="$2"
+    local metadata_dir="${project_dir}/.docker-dev"
+    local tag_file="${metadata_dir}/project-tag"
+    local line
+    local schema_version=""
+    local lang=""
+    local seen_schema=0
+    local seen_lang=0
+
+    DDEV_TAG_LANG=""
+    DDEV_RESOLVE_ERROR=""
+
+    if [[ -L "$metadata_dir" || ! -d "$metadata_dir" ]]; then
+        DDEV_RESOLVE_ERROR="project metadata directory is missing or invalid: $metadata_dir"
+        return 1
+    fi
+    if [[ -L "$tag_file" || ! -f "$tag_file" || ! -r "$tag_file" ]]; then
+        DDEV_RESOLVE_ERROR="project tag is missing or is not a readable regular file: $tag_file"
+        return 1
+    fi
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        case "$line" in
+            schema_version=*)
+                if ((seen_schema)); then
+                    DDEV_RESOLVE_ERROR="duplicate schema_version in project tag: $tag_file"
+                    return 1
+                fi
+                schema_version="${line#schema_version=}"
+                seen_schema=1
+                ;;
+            lang=*)
+                if ((seen_lang)); then
+                    DDEV_RESOLVE_ERROR="duplicate lang in project tag: $tag_file"
+                    return 1
+                fi
+                lang="${line#lang=}"
+                seen_lang=1
+                ;;
+            *)
+                DDEV_RESOLVE_ERROR="invalid field in project tag: $tag_file"
+                return 1
+                ;;
+        esac
+    done < "$tag_file"
+
+    if ((!seen_schema || !seen_lang)) || [[ -z "$schema_version" || -z "$lang" ]]; then
+        DDEV_RESOLVE_ERROR="project tag must contain non-empty schema_version and lang fields: $tag_file"
+        return 1
+    fi
+    if [[ "$schema_version" != 1 ]]; then
+        DDEV_RESOLVE_ERROR="unsupported project tag schema_version '$schema_version': $tag_file"
+        return 1
+    fi
+    if ! ddev_cli_is_managed_language "$script_dir" "$lang"; then
+        DDEV_RESOLVE_ERROR="project tag refers to an unknown or unmanaged language '$lang': $tag_file"
+        return 1
+    fi
+
+    DDEV_TAG_LANG="$lang"
+}
+
+ddev_write_project_tag() {
+    local project_dir="$1"
+    local lang="$2"
+    local script_dir="$3"
+    local metadata_dir="${project_dir}/.docker-dev"
+    local tag_file="${metadata_dir}/project-tag"
+    local temporary_file
+
+    DDEV_RESOLVE_ERROR=""
+
+    if ! ddev_cli_is_managed_language "$script_dir" "$lang"; then
+        DDEV_RESOLVE_ERROR="cannot write project tag for unknown or unmanaged language: $lang"
+        return 1
+    fi
+    if [[ ! -d "$project_dir" || ! -w "$project_dir" ]]; then
+        DDEV_RESOLVE_ERROR="project directory must exist and be writable: $project_dir"
+        return 1
+    fi
+    if [[ -L "$metadata_dir" || ( -e "$metadata_dir" && ! -d "$metadata_dir" ) ]]; then
+        DDEV_RESOLVE_ERROR="project metadata path is not a real directory: $metadata_dir"
+        return 1
+    fi
+    if [[ ! -d "$metadata_dir" ]] && ! mkdir -p -- "$metadata_dir"; then
+        DDEV_RESOLVE_ERROR="cannot create project metadata directory: $metadata_dir"
+        return 1
+    fi
+    if [[ -L "$tag_file" || ( -e "$tag_file" && ! -f "$tag_file" ) ]]; then
+        DDEV_RESOLVE_ERROR="project tag path is not a regular file: $tag_file"
+        return 1
+    fi
+
+    if ! temporary_file="$(mktemp -- "${metadata_dir}/.project-tag.XXXXXX")"; then
+        DDEV_RESOLVE_ERROR="cannot create temporary project tag in: $metadata_dir"
+        return 1
+    fi
+    if ! printf 'schema_version=1\nlang=%s\n' "$lang" > "$temporary_file"; then
+        rm -f -- "$temporary_file"
+        DDEV_RESOLVE_ERROR="cannot write temporary project tag in: $metadata_dir"
+        return 1
+    fi
+    if ! mv -f -- "$temporary_file" "$tag_file"; then
+        rm -f -- "$temporary_file"
+        DDEV_RESOLVE_ERROR="cannot publish project tag: $tag_file"
+        return 1
+    fi
+}
+
+ddev_resolve_run_project() {
+    local script_dir="$1"
+    local base="$2"
+    local target="$3"
+    local resolved_base
+    local candidate
+    local resolved_candidate
+    local lang
+    local index
+    local invalid_candidates=()
+    local -a candidate_paths=()
+    local -a candidate_langs=()
+    local -a valid_paths=()
+    local -a valid_langs=()
+
+    DDEV_PROJECT_DIR=""
+    DDEV_PROJECT_LANG=""
+    DDEV_CANDIDATE_PATHS=()
+    DDEV_RESOLVE_ERROR=""
+    DDEV_RESOLVE_AMBIGUOUS=0
+
+    if [[ -z "$target" ]]; then
+        resolved_candidate="$(readlink -m -- "$PWD")"
+        if [[ ! -d "$resolved_candidate" || ! -r "$resolved_candidate" ]]; then
+            DDEV_RESOLVE_ERROR="current directory is not a readable project directory: $resolved_candidate"
+            return 1
+        fi
+        if ! ddev_read_project_tag "$resolved_candidate" "$script_dir"; then
+            return 1
+        fi
+        DDEV_PROJECT_DIR="$resolved_candidate"
+        DDEV_PROJECT_LANG="$DDEV_TAG_LANG"
+        return 0
+    fi
+
+    if [[ "$target" == /* ]]; then
+        resolved_candidate="$(readlink -m -- "$target")"
+        if [[ ! -d "$resolved_candidate" || ! -r "$resolved_candidate" ]]; then
+            DDEV_RESOLVE_ERROR="absolute target must be an existing readable directory: $resolved_candidate"
+            return 1
+        fi
+        if ! ddev_read_project_tag "$resolved_candidate" "$script_dir"; then
+            return 1
+        fi
+        DDEV_PROJECT_DIR="$resolved_candidate"
+        DDEV_PROJECT_LANG="$DDEV_TAG_LANG"
+        return 0
+    fi
+
+    if [[ "$base" != /* || ! -d "$base" ]]; then
+        DDEV_RESOLVE_ERROR="project base must be an existing absolute directory: $base"
+        return 1
+    fi
+    if ! ddev_cli_validate_relative_target "$target"; then
+        return 1
+    fi
+    if ! ddev_cli_load_languages "$script_dir"; then
+        return 1
+    fi
+
+    resolved_base="$(readlink -m -- "$base")"
+    for lang in "${DDEV_LANGUAGES[@]}"; do
+        candidate="${resolved_base}/${lang}/${target}"
+        [[ -d "$candidate" ]] || continue
+        resolved_candidate="$(readlink -m -- "$candidate")"
+        case "$resolved_candidate" in
+            "${resolved_base}/${lang}/"*) ;;
+            *)
+                DDEV_RESOLVE_ERROR="candidate resolves outside its language directory: $candidate"
+                return 1
+                ;;
+        esac
+        candidate_paths+=("$resolved_candidate")
+        candidate_langs+=("$lang")
+    done
+
+    if ((${#candidate_paths[@]} == 0)); then
+        DDEV_RESOLVE_ERROR="no project found for target '$target' under any managed language in $resolved_base"
+        return 1
+    fi
+
+    for index in "${!candidate_paths[@]}"; do
+        if ! ddev_read_project_tag "${candidate_paths[index]}" "$script_dir"; then
+            invalid_candidates+=("${candidate_paths[index]}: ${DDEV_RESOLVE_ERROR}")
+            continue
+        fi
+        if [[ "$DDEV_TAG_LANG" != "${candidate_langs[index]}" ]]; then
+            invalid_candidates+=("${candidate_paths[index]}: tag language '$DDEV_TAG_LANG' does not match '${candidate_langs[index]}'")
+            continue
+        fi
+        valid_paths+=("${candidate_paths[index]}")
+        valid_langs+=("${candidate_langs[index]}")
+    done
+
+    if ((${#invalid_candidates[@]})); then
+        DDEV_RESOLVE_ERROR="one or more target candidates have missing or invalid project tags:"
+        for candidate in "${invalid_candidates[@]}"; do
+            DDEV_RESOLVE_ERROR+=$'\n'"  $candidate"
+        done
+        return 1
+    fi
+
+    if ((${#valid_paths[@]} > 1)); then
+        DDEV_RESOLVE_AMBIGUOUS=1
+        DDEV_CANDIDATE_PATHS=("${valid_paths[@]}")
+        DDEV_RESOLVE_ERROR="target '$target' matches multiple projects; repeat the command with one absolute path:"
+        for candidate in "${valid_paths[@]}"; do
+            DDEV_RESOLVE_ERROR+=$'\n'"  $candidate"
+        done
+        return 2
+    fi
+
+    DDEV_PROJECT_DIR="${valid_paths[0]}"
+    DDEV_PROJECT_LANG="${valid_langs[0]}"
+}

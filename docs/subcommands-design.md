@@ -4,7 +4,7 @@
 
 Documento di progettazione per il branch `subcommands`. Specifica il comportamento atteso dei subcomandi `build` e `run`, il dispatch, la risoluzione dei progetti, i metadati necessari e il piano di verifica. Non modifica la CR rev. 2, che potrà essere integrata successivamente.
 
-Questo documento descrive il design approvato per i requisiti concordati. Il parsing e il riconoscimento iniziale dei subcomandi sono implementati; il dispatch operativo, la risoluzione dei target, i tag e i flussi build/run sono ancora da implementare. Le decisioni ancora raccomandate, ma non approvate, sono indicate come tali.
+Questo documento descrive il design approvato per i requisiti concordati. Il parsing dei subcomandi e gli helper di risoluzione progetto/tag sono implementati e testati; il collegamento di tali helper ai flussi operativi build/run e la selezione degli step di pipeline restano da implementare. Le decisioni ancora raccomandate, ma non approvate, sono indicate come tali.
 
 ### Decisioni approvate
 
@@ -56,6 +56,8 @@ Un'opzione sconosciuta, un argomento mancante o un'opzione non ammessa per il su
 ### Risoluzione del progetto
 
 Il target relativo non include il linguaggio: `foo/bar` è un percorso interno al linguaggio, non `Python/foo/bar`.
+
+Nei comandi espliciti, `BASE` nella formula `$BASE/$lang/$target` indica la radice effettiva dei progetti. Per mantenere la collocazione attuale con l'ambiente predefinito, questa corrisponde a `$ORG/REP/DEV`; il `BASE` interno legacy (`$ORG/REP`) viene esteso con l'ambiente prima di individuare il progetto.
 
 #### `build`
 
@@ -196,10 +198,9 @@ La guida d'uso dovrà inoltre spiegare:
 
 ## Sequenza di lavoro suggerita
 
-1. Confermare le raccomandazioni di compatibilità legacy, target assoluti e tag file.
-2. Implementare dispatch e parsing isolabili, con test del contratto CLI.
-3. Implementare risoluzione target/tag e i test di errore, inclusa l'ambiguità.
-4. Separare e collaudare i flussi build/run; verificare che run non costruisca.
-5. Scrivere/aggiornare la guida utente sui comportamenti effettivamente collaudati.
+1. Dispatch e parsing isolabili, con test del contratto CLI (implementati).
+2. Risoluzione target/tag e test di errore, inclusa l'ambiguità (helper implementati; integrazione operativa da completare).
+3. Separare e collaudare i flussi build/run; verificare che run non costruisca.
+4. Scrivere/aggiornare la guida utente sui comportamenti effettivamente collaudati.
 
 I commit dovrebbero seguire unità coerenti e verificabili, non singole micro-modifiche: dispatch/CLI, risoluzione e tag, flussi/test, documentazione finale. La CR rev. 2 resta fuori perimetro fino alla successiva integrazione concordata.
