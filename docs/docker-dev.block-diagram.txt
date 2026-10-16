@@ -23,7 +23,7 @@ E --> E5[args extra per il container]
 
 E --> F[check()]
 F --> F1[BASE = BASE/$penv]
-F --> F2[Lista tipi supportati: langs/*]
+F --> F2[Lista modelli supportati: langs/*, services/*, stacks/*]
 F --> F3[Risoluzione path target]
 F --> F4{Target esiste?}
 
@@ -46,10 +46,10 @@ G3 --> G4[PROJECT_DIR = $BASE/<Tipo>/<Project>]
 G4 --> H[ex_validate_project(PROJECT_DIR)]
 H --> H1[Analizza path]
 H1 --> H2[Trova "REP" nel percorso]
-H2 --> H3[Estrae P_NAME, P_TYPE, P_TARGET]
+H2 --> H3[Estrae P_NAME, P_MODEL, P_TARGET]
 
 H3 --> I[Impostazione Docker]
-I --> I1[IMAGE_NAME = -i o ${P_TARGET}.${P_TYPE}]
+I --> I1[IMAGE_NAME = -i o ${P_TARGET}.${P_MODEL}]
 I1 --> I2[lowercase]
 I2 --> I3[CONTAINER_NAME = ${IMAGE_NAME}.${P_NAME}]
 I3 --> I4[APP_DIR_IN_CONTAINER = /app]
@@ -64,14 +64,14 @@ L1 -- Sì --> M[APPLY_TEMPLATES = apply-templates.sh]
 M --> M1{File esiste?}
 M1 -- No --> X
 M1 -- Sì --> M2{OVERWRITE = 1?}
-M2 -- Sì --> M3[apply-templates.sh -o PROJECT_DIR P_TYPE]
-M2 -- No --> M4[apply-templates.sh PROJECT_DIR P_TYPE]
+M2 -- Sì --> M3[apply-templates.sh -o PROJECT_DIR P_MODEL]
+M2 -- No --> M4[apply-templates.sh PROJECT_DIR P_MODEL]
 
 M3 --> N[cd PROJECT_DIR]
 M4 --> N
-N --> O[run_lang_pipeline()]
+N --> O[run_model_pipeline()]
 
-O --> O1[bin_dir = langs/<P_TYPE>/bin]
+O --> O1[bin_dir = root modello/<P_MODEL>/bin]
 O1 --> O2{Esiste /bin?}
 O2 -- No --> X
 O2 -- Sì --> O3[find script numerati: [0-9]+.*.sh]

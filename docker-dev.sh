@@ -2,7 +2,7 @@
 #
 # v0.9
 #
-# --target=<Lang>/path/to/project es.: --target="Python/path/to/project"
+# --target=<Model>/path/to/project es.: --target="Python/path/to/project"
 # oppure:
 # path assoluto a progetto esistente (con permessi utente rw)
 # --target="/home/user/REP/DEV/Python/baz"
@@ -18,8 +18,8 @@ source "${SCRIPT_DIR}/docker-dev-cli.sh"
 source "${SCRIPT_DIR}/docker-run-extra-args.sh"
 
 usage() {
-  echo "Usage: $0 --target=<Type>/<name> [--penv=ENV] [-i IMAGE_NAME] [-o] [-- command...]"
-  echo "  --target  Project dir: relative <Type>/<name> under \$BASE or absolute existing path"
+  echo "Usage: $0 --target=<Model>/<name> [--penv=ENV] [-i IMAGE_NAME] [-o] [-- command...]"
+  echo "  --target  Project dir: relative <Model>/<name> under \$BASE or absolute existing path"
   echo "  --penv    Project environment subdir (default: DEV)"
   echo "  -i        Specify the docker image name"
   echo "  -o        Overwrite existing template files in the project folder"
@@ -67,21 +67,26 @@ check_docker() {
     return 1
 }
 
-run_lang_pipeline() {
+run_model_pipeline() {
     local script_dir="$1"
     local project_dir="$2"
-    local p_type="$3"
+    local _model="$3"
     local image_name="$4"
     local container_name="$5"
     shift 5
 
     local container_cmd=("$@")
-    local lang_root
+    local model_root
     local bin_dir
     local script
     local scripts_found=0
 
-    bin_dir="${script_dir}/langs/${p_type}/bin"
+    if ! ddev_cli_find_model_dir "$script_dir" "$_model"; then
+        echo "[pipeline] ERROR: $DDEV_RESOLVE_ERROR" >&2
+        return 1
+    fi
+    model_root="$DDEV_MODEL_DIR"
+    bin_dir="${model_root}/bin"
 
     if [[ ! -d "$bin_dir" ]]; then
         echo "[pipeline] ERROR: Missing /bin folder: $bin_dir" >&2
@@ -132,8 +137,8 @@ run_lang_pipeline() {
 project_identity() {
   # 
   # Split PROJECT_DIR into components &
-  # Extract project name, type, and target into P_NAME, P_TARGET, P_TYPE
-  # es.: PROJECT_DIR=/home/user/REP/DEV/Python/foo' -> P_NAME=foo, P_TARGET=DEV, P_TYPE=Python
+  # Extract project name, model, and target into P_NAME, P_TARGET, P_MODEL
+  # es.: PROJECT_DIR=/home/user/REP/DEV/Python/foo' -> P_NAME=foo, P_TARGET=DEV, P_MODEL=Python
 
   local __PROJECT_DIR="$1"
   _tag="[project_identity]"
@@ -154,17 +159,17 @@ project_identity() {
   #echo "$_tag [debug] TODO: check if if REP index <${REP_INDEX}> is last index!"
 
   if [ $REP_INDEX -ne -1 ]; then
-    # Extract project name, type, and target from PROJECT_DIR
+    # Extract project name, model, and target from PROJECT_DIR
     P_NAME=$(basename "$__PROJECT_DIR" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/_/g')
     P_TARGET=${components[REP_INDEX + 1]}
-    P_TYPE=${components[REP_INDEX + 2]}
+    P_MODEL=${components[REP_INDEX + 2]}
 
     # Format P_NAME to replace '-' with '_'
     P_NAME=${P_NAME//-/_}
 
     echo "Project Folder : $__PROJECT_DIR"
     echo "Project Name   : $P_NAME"
-    echo "Project Type   : $P_TYPE"	# Project Language...
+    echo "Project Model  : $P_MODEL"
     echo "Project Target : $P_TARGET"
     return 0
   else
@@ -255,8 +260,8 @@ project_setup() {
 
   local _full_target="$1"
   IFS=/ read -r -a components <<< "$_full_target"
-  local _p_type="${components[0]}"
-  local _p_target_folder="${_full_target#*/}"
+  local _model="${components[0]}"
+  local _target_folder="${_full_target#*/}"
 
   BASE="$BASE/$2"   # aggiorna $BASE con il valore dell'argomento --penv ($2)
 
@@ -267,7 +272,7 @@ project_setup() {
     for _dir in "$SCRIPT_DIR/langs" "$SCRIPT_DIR/services" "$SCRIPT_DIR/stacks"; do
       [[ -d "$_dir" ]] || continue
       find "$_dir" -maxdepth 1 -mindepth 1 -type d -printf '%f\n'
-    done | sort
+    done | sort -u
   )
   local _MODELS=$(IFS=", "; echo "${MANAGED_MODELS[*]}")
   
@@ -296,8 +301,8 @@ project_setup() {
 
     # --target=<Lang>/path/to/project
     #
-    if ! is_managed_project_type "$_p_type"; then
-      echo "$_tag WARNING: Unknow Model $_p_type" >&2
+    if ! is_managed_model "$_model"; then
+      echo "$_tag WARNING: Unknow Model $_model" >&2
       echo "$_tag Select one of the following:"
       echo "$_tag $_MODELS"
       return 1
@@ -314,7 +319,7 @@ project_setup() {
       return 1
     fi
 
-    if ! create_relative_folder "$_p_type" "$_p_target_folder"; then
+    if ! create_relative_folder "$_model" "$_target_folder"; then
       echo "$_tag Error creating $1" >&2
       return 1
     fi
@@ -328,20 +333,20 @@ project_setup() {
 
 create_relative_folder() {
 
-  # _p_type      : e' un project type ammesso (es.: Python)
-  # _p_target_folder    : e' il project name (es.: foo se --target='Python/foo')
+  # _model            : e' un modello gestito (es.: Python, Postgres da langs/Python, services/Postgres)
+  # _target_folder    : e' il project name (es.: foo se --target='Python/foo')
   #
-  local _p_type="$1"
-  local _p_target_folder="$2"
+  local _model="$1"
+  local _target_folder="$2"
 
-  if [ -n "$_p_target_folder" ]; then
-    if [ ! -d "$(readlink -f "$BASE/$_p_type/$_p_target_folder")" ]; then  # mkdir only if not exist
-      echo "$_tag mkdir -p $BASE/$_p_type/$_p_target_folder"
-      mkdir -p "$BASE/$_p_type/$_p_target_folder"
+  if [ -n "$_target_folder" ]; then
+    if [ ! -d "$(readlink -f "$BASE/$_model/$_target_folder")" ]; then  # mkdir only if not exist
+      echo "$_tag mkdir -p $BASE/$_model/$_target_folder"
+      mkdir -p "$BASE/$_model/$_target_folder"
     else
       echo "$_tag directory already exist"
     fi
-    PROJECT_DIR="$BASE/$_p_type/$_p_target_folder"
+    PROJECT_DIR="$BASE/$_model/$_target_folder"
   else
     echo "$_tag ERROR: Missing project Name!"
     return 1
@@ -360,31 +365,22 @@ is_absolute() {
     return 1
 }
 
-is_managed_project_type() {
-  
-  # -> is_managed_model()
-  # MANAGED_MODELS definita in project_setup()
-  #
-  local p_type="$1"
-
-  for t in "${MANAGED_MODELS[@]}"; do
-    if [[ "$t" == "$p_type" ]]; then
-      return 0
-    fi
-  done
-
-  return 1
+is_managed_model() {
+  if ! ddev_cli_is_managed_model "$SCRIPT_DIR" "$1"; then
+    echo "[is_managed_model] ERROR: $DDEV_RESOLVE_ERROR" >&2
+    return 1
+  fi
 }
 
 ddev_set_explicit_project_identity() {
     local project_dir="$1"
-    local lang="$2"
+    local model="$2"
     local repo_root
     local repo_relative
 
     P_NAME="$(basename -- "$project_dir" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/_/g')"
     P_NAME="${P_NAME//-/_}"
-    P_TYPE="$lang"
+    P_MODEL="$model"
     P_TARGET="DEV"
 
     repo_root="$(readlink -m -- "${ORG}/REP")"
@@ -397,7 +393,7 @@ ddev_set_explicit_project_identity() {
             ;;
     esac
 
-    IMAGE_NAME="${IMAGE_NAME:-${P_TARGET}.${P_TYPE}}"
+    IMAGE_NAME="${IMAGE_NAME:-${P_TARGET}.${P_MODEL}}"
     IMAGE_NAME="${IMAGE_NAME,,}"
     CONTAINER_NAME="${IMAGE_NAME}.${P_NAME}"
 }
@@ -413,8 +409,8 @@ ddev_run_explicit_command() {
     project_base="${BASE}/DEV"
 
     if [[ "$operation" == build ]]; then
-        if ! ddev_cli_is_managed_language "$SCRIPT_DIR" "$DDEV_LANG"; then
-            echo "[build] ERROR: unknown or unmanaged language: $DDEV_LANG" >&2
+        if ! ddev_cli_is_managed_model "$SCRIPT_DIR" "$DDEV_MODEL"; then
+            echo "[build] ERROR: $DDEV_RESOLVE_ERROR" >&2
             return 2
         fi
         if [[ -n "$DDEV_TARGET" && "$DDEV_TARGET" != /* ]]; then
@@ -423,7 +419,7 @@ ddev_run_explicit_command() {
                 return 2
             fi
         fi
-        if ! ddev_resolve_build_project "$SCRIPT_DIR" "$project_base" "$DDEV_LANG" "$DDEV_TARGET"; then
+        if ! ddev_resolve_build_project "$SCRIPT_DIR" "$project_base" "$DDEV_MODEL" "$DDEV_TARGET"; then
             echo "[build] ERROR: $DDEV_RESOLVE_ERROR" >&2
             return 1
         fi
@@ -440,12 +436,11 @@ ddev_run_explicit_command() {
     fi
 
     PROJECT_DIR="$DDEV_PROJECT_DIR"
-    DDEV_PROJECT_LANG="$DDEV_PROJECT_LANG"
-    P_TYPE="$DDEV_PROJECT_LANG"
-    ddev_set_explicit_project_identity "$PROJECT_DIR" "$P_TYPE"
+    P_MODEL="$DDEV_PROJECT_MODEL"
+    ddev_set_explicit_project_identity "$PROJECT_DIR" "$P_MODEL"
 
     echo "Project Folder : $PROJECT_DIR"
-    echo "Project Type   : $P_TYPE"
+    echo "Project Model  : $P_MODEL"
     echo "Project Target : $P_TARGET"
     echo "Image Name     : $IMAGE_NAME"
     echo "Container Name : $CONTAINER_NAME"
@@ -457,8 +452,8 @@ ddev_run_explicit_command() {
     if [[ "$operation" == run ]]; then
         if ! docker inspect --type=image "$IMAGE_NAME" >/dev/null 2>&1; then
             echo "[run] ERROR: image '$IMAGE_NAME' is not available locally." >&2
-            printf '[run] Build it first with: docker-dev build --lang %q --target %q\n' \
-                "$P_TYPE" "$PROJECT_DIR" >&2
+            printf '[run] Build it first with: docker-dev build --model %q --target %q\n' \
+                "$P_MODEL" "$PROJECT_DIR" >&2
             return 1
         fi
     fi
@@ -477,7 +472,7 @@ ddev_run_explicit_command() {
             return 1
         fi
 
-        if ! "$apply_templates" "$PROJECT_DIR" "$P_TYPE"; then
+        if ! "$apply_templates" "$PROJECT_DIR" "$P_MODEL"; then
             echo "[build] ERROR: template application failed for: $PROJECT_DIR" >&2
             return 1
         fi
@@ -485,21 +480,21 @@ ddev_run_explicit_command() {
             echo "[build] ERROR: cannot enter project directory: $PROJECT_DIR" >&2
             return 1
         fi
-        if ! ddev_run_lang_operation \
-            "$SCRIPT_DIR" "$PROJECT_DIR" "$P_TYPE" "$IMAGE_NAME" "$CONTAINER_NAME" build; then
-            echo "[build] ERROR: ${DDEV_RESOLVE_ERROR:-language setup/build failed}" >&2
+        if ! ddev_run_model_operation \
+            "$SCRIPT_DIR" "$PROJECT_DIR" "$P_MODEL" "$IMAGE_NAME" "$CONTAINER_NAME" build; then
+            echo "[build] ERROR: ${DDEV_RESOLVE_ERROR:-model setup/build failed}" >&2
             return 1
         fi
-        if ! ddev_write_project_tag "$PROJECT_DIR" "$P_TYPE" "$SCRIPT_DIR"; then
+        if ! ddev_write_project_tag "$PROJECT_DIR" "$P_MODEL" "$SCRIPT_DIR"; then
             echo "[build] ERROR: $DDEV_RESOLVE_ERROR" >&2
             return 1
         fi
         echo "[build] Project tag written: ${PROJECT_DIR}/.docker-dev/project-tag"
 
         if [[ "$DDEV_BUILD_AND_RUN" -eq 1 ]]; then
-            if ! ddev_run_lang_operation \
-                "$SCRIPT_DIR" "$PROJECT_DIR" "$P_TYPE" "$IMAGE_NAME" "$CONTAINER_NAME" run-only; then
-                echo "[run] ERROR: ${DDEV_RESOLVE_ERROR:-language run failed}" >&2
+            if ! ddev_run_model_operation \
+                "$SCRIPT_DIR" "$PROJECT_DIR" "$P_MODEL" "$IMAGE_NAME" "$CONTAINER_NAME" run-only; then
+                echo "[run] ERROR: ${DDEV_RESOLVE_ERROR:-model run failed}" >&2
                 return 1
             fi
         fi
@@ -514,9 +509,9 @@ ddev_run_explicit_command() {
         echo "[run] ERROR: cannot enter project directory: $PROJECT_DIR" >&2
         return 1
     fi
-    if ! ddev_run_lang_operation \
-        "$SCRIPT_DIR" "$PROJECT_DIR" "$P_TYPE" "$IMAGE_NAME" "$CONTAINER_NAME" run; then
-        echo "[run] ERROR: ${DDEV_RESOLVE_ERROR:-language run failed}" >&2
+    if ! ddev_run_model_operation \
+        "$SCRIPT_DIR" "$PROJECT_DIR" "$P_MODEL" "$IMAGE_NAME" "$CONTAINER_NAME" run; then
+        echo "[run] ERROR: ${DDEV_RESOLVE_ERROR:-model run failed}" >&2
         return 1
     fi
 }
@@ -618,13 +613,13 @@ GID_="${GID_:-$(id -g)}"
 
 # Naming:
 # - IMAGE_NAME gia' impostata (opzione -i oppure export) -> mantenuta
-# - altrimenti                                            -> ${P_TARGET}.${P_TYPE}
+# - altrimenti                                            -> ${P_TARGET}.${P_MODEL}
 # IMAGE_NAME viene comunque lowercased (docker repo names reject uppercase)
 # e CONTAINER_NAME e' sempre derivata da essa.
-# VOLUME_NAME resta a carico dei langs/*/bin scripts:
-# prefisso di linguaggio + CONTAINER_NAME (override one-off via env).
+# VOLUME_NAME resta a carico degli script bin/ del modello:
+# prefisso specifico + CONTAINER_NAME (override one-off via env).
 #
-IMAGE_NAME="${IMAGE_NAME:-${P_TARGET}.${P_TYPE}}"
+IMAGE_NAME="${IMAGE_NAME:-${P_TARGET}.${P_MODEL}}"
 IMAGE_NAME="${IMAGE_NAME,,}"
 CONTAINER_NAME="${IMAGE_NAME}.${P_NAME}"
 
@@ -660,17 +655,17 @@ if [[ ! -f "$APPLY_TEMPLATES" ]]; then
 fi
 
 if [[ "$OVERWRITE" -eq 1 ]]; then
-    "$APPLY_TEMPLATES" -o "$PROJECT_DIR" "$P_TYPE"
+    "$APPLY_TEMPLATES" -o "$PROJECT_DIR" "$P_MODEL"
 else
-    "$APPLY_TEMPLATES" "$PROJECT_DIR" "$P_TYPE"
+    "$APPLY_TEMPLATES" "$PROJECT_DIR" "$P_MODEL"
 fi
 
 cd "$PROJECT_DIR"
 
-run_lang_pipeline \
+run_model_pipeline \
     "$SCRIPT_DIR" \
     "$PROJECT_DIR" \
-    "$P_TYPE" \
+    "$P_MODEL" \
     "$IMAGE_NAME" \
     "$CONTAINER_NAME" \
     "${CONTAINER_CMD[@]}"

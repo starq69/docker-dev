@@ -8,45 +8,46 @@ percorso dello script.
 ## Comandi
 
 ```text
-docker-dev build --lang <linguaggio> [--target <target>] [-x] [-y]
+docker-dev build --model <model> [--target <target>] [-x] [-y]
 docker-dev run [--target <target>]
 ```
 
 Le opzioni lunghe possono essere passate sia separate sia con `=`:
 
 ```bash
-docker-dev build --lang Bun --target foo
-docker-dev build --lang=Bun --target=foo
+docker-dev build --model Bun --target foo
+docker-dev build --model=Bun --target=foo
 ```
 
-Il linguaggio deve essere una directory gestita sotto `langs/`, per esempio
-`Bun`, `Python`, `Deno`, `Perl` o `Cpp`. Il valore è sensibile alle maiuscole e
-minuscole.
+Il modello deve corrispondere a una directory gestita sotto `langs/`,
+`services/` o `stacks/`. Il valore è sensibile alle maiuscole e minuscole;
+il nome deve essere univoco fra queste root. `--lang` resta disponibile come
+alias compatibile per `--model`.
 
 ## Build
 
-`build` applica i template del linguaggio, esegue gli step di setup e build e,
+`build` applica i template del modello, esegue gli step di setup e build e,
 solo se questi terminano correttamente, scrive il tag del progetto.
 
 ```bash
 # Crea o aggiorna il progetto in $ORG/REP/DEV/Bun/foo
-docker-dev build --lang Bun --target foo
+docker-dev build --model Bun --target foo
 
 # Usa la directory corrente come progetto
-docker-dev build --lang Bun
+docker-dev build --model Bun
 
 # Costruisce e, dopo il successo della build, avvia anche il container
-docker-dev build --lang Bun --target foo -x
+docker-dev build --model Bun --target foo -x
 
 # Esegue la build senza chiedere conferma
-docker-dev build --lang Bun --target foo -y
+docker-dev build --model Bun --target foo -y
 ```
 
-- `--lang` è obbligatorio.
+- `--model` è obbligatorio.
 - Senza `--target`, il progetto è `$PWD`, che deve già esistere ed essere
   accessibile in lettura e scrittura.
-- Un target relativo, per esempio `foo/bar`, non include il linguaggio e viene
-  risolto sotto `$ORG/REP/DEV/<linguaggio>/foo/bar`.
+- Un target relativo, per esempio `foo/bar`, non include il modello e viene
+  risolto sotto `$ORG/REP/DEV/<model>/foo/bar`.
 - Il valore predefinito di `ORG` è `$HOME`; quindi il percorso predefinito è,
   per esempio, `$HOME/REP/DEV/Bun/foo`.
 - Un target assoluto deve indicare una directory già esistente e accessibile.
@@ -55,9 +56,9 @@ docker-dev build --lang Bun --target foo -y
 - `-y` salta il prompt di conferma di `build`; non disabilita validazioni o
   controlli.
 
-Se l'immagine esiste già localmente, lo script di build della lingua può
+Se l'immagine esiste già localmente, lo script di build del modello può
 riutilizzarla senza ricostruirla. Per eseguire un aggiornamento dell'immagine,
-seguire la procedura specifica del progetto/linguaggio.
+seguire la procedura specifica del progetto/modello.
 
 ## Run
 
@@ -68,7 +69,7 @@ seguire la procedura specifica del progetto/linguaggio.
 cd "$HOME/REP/DEV/Bun/foo"
 docker-dev run
 
-# Da una directory radice linguaggio, seleziona un progetto figlio
+# Da una directory radice modello, seleziona un progetto figlio
 cd "$HOME/REP/DEV/Bun"
 docker-dev run --target foo
 ```
@@ -81,9 +82,9 @@ docker-dev run --target foo
   indicando il percorso cercato; non avvia Docker e non tenta una ricerca
   alternativa.
 - Se il progetto locale non ha ancora il tag, ma la directory corrente è sotto
-  una root linguaggio gestita, per esempio `$HOME/REP/DEV/Bun`, il linguaggio
-  viene dedotto da tale percorso. Un tag presente ma non valido, o incoerente
-  con la root linguaggio, causa un errore.
+  una root modello gestita, per esempio `$HOME/REP/DEV/Bun`, il modello viene
+  dedotto da tale percorso. Un tag presente ma non valido, o incoerente con la
+  root modello, causa un errore.
 - Un target assoluto seleziona la directory indicata e richiede un tag valido
   al suo interno:
 
@@ -109,16 +110,17 @@ Il contenuto della versione corrente è testuale:
 
 ```text
 schema_version=1
-lang=Bun
+model=Bun
 ```
 
-Il tag identifica il linguaggio per `run`. Viene pubblicato atomicamente solo
+Il tag identifica il modello per `run`. I tag precedenti con il campo `lang=`
+restano leggibili; le nuove build scrivono `model=`. Il tag viene pubblicato atomicamente solo
 dopo il successo degli step di setup e build; se `build -x` completa la build ma
 il run successivo fallisce, il tag resta valido perché la build è riuscita.
 
 Se il tag è mancante o non valido, `run` su `$PWD` o su un target assoluto
 termina con un errore esplicito. Per un progetto legacy senza tag, eseguire
-`run --target <progetto>` dalla directory radice del linguaggio, per esempio
+`run --target <progetto>` dalla directory radice del modello, per esempio
 `$HOME/REP/DEV/Bun`.
 
 ## Sintassi legacy
@@ -141,13 +143,13 @@ avviso di deprecazione.
 
 | Messaggio/situazione | Causa e azione |
 |---|---|
-| `build requires --lang` | Specificare un linguaggio gestito, per esempio `--lang Bun`. |
-| `unknown or unmanaged language` | Il valore di `--lang` non corrisponde a una directory sotto `langs/`; verificare anche maiuscole e minuscole. |
+| `build requires --model` | Specificare un modello gestito, per esempio `--model Bun`. |
+| `unknown or unmanaged model` | Il valore di `--model` non corrisponde a una directory sotto `langs/`, `services/` o `stacks/`; verificare anche maiuscole e minuscole. |
 | `target ... does not exist under the current directory` | Il target relativo di `run` non è un figlio di `$PWD`; spostarsi nella directory genitore corretta oppure usare un percorso assoluto. |
-| `project metadata directory is missing or invalid` / tag mancante o non leggibile | Eseguire una build riuscita oppure, per un progetto legacy senza tag, usare `run --target` dalla sua root linguaggio. |
+| `project metadata directory is missing or invalid` / tag mancante o non leggibile | Eseguire una build riuscita oppure, per un progetto legacy senza tag, usare `run --target` dalla sua root modello. |
 | `unsupported project tag schema_version` / tag non valido | Correggere o rigenerare il tag con una build riuscita. |
-| `image ... is not available locally` | Eseguire prima `docker-dev build --lang <linguaggio> --target <progetto>`. |
-| `... is only valid with build` | Spostare l'opzione build-only (`--lang`, `-x` o `-y`) sul comando `build`. |
+| `image ... is not available locally` | Eseguire prima `docker-dev build --model <model> --target <progetto>`. |
+| `... is only valid with build` | Spostare l'opzione build-only (`--model`, `-x` o `-y`) sul comando `build`. |
 
 Per gli errori di sintassi, `docker-dev build --help` e `docker-dev run --help`
 mostrano l'usage del subcomando.

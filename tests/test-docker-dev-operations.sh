@@ -67,13 +67,13 @@ PROJECT_BASE="${ORG}/REP/DEV"
 PROJECT_DIR="${PROJECT_BASE}/Python/basic"
 
 env ORG="$ORG" HOME="$HOME" PATH="$PATH" \
-    "$SCRIPT_DIR/docker-dev.sh" build --lang Python --target basic -y \
+    "$SCRIPT_DIR/docker-dev.sh" build --model Python --target basic -y \
     >"${TEST_ROOT}/build.out" 2>&1 ||
     fail "build command failed: $(cat "${TEST_ROOT}/build.out")"
 
 [[ -f "${PROJECT_DIR}/.docker-dev/project-tag" ]] ||
     fail "successful build did not write a project tag"
-[[ "$(cat "${PROJECT_DIR}/.docker-dev/project-tag")" == $'schema_version=1\nlang=Python' ]] ||
+[[ "$(cat "${PROJECT_DIR}/.docker-dev/project-tag")" == $'schema_version=1\nmodel=Python' ]] ||
     fail "build wrote unexpected project tag content"
 grep -q '^build ' "$FAKE_LOG" || fail "build command did not build an image"
 if grep -q '^run ' "$FAKE_LOG"; then
@@ -88,7 +88,7 @@ mkdir -p "$DEFAULT_PROJECT"
         "$SCRIPT_DIR/docker-dev.sh" build --lang Python -y \
         >"${TEST_ROOT}/build-default-target.out" 2>&1
 ) || fail "build without --target did not use the current directory: $(cat "${TEST_ROOT}/build-default-target.out")"
-[[ "$(cat "${DEFAULT_PROJECT}/.docker-dev/project-tag")" == $'schema_version=1\nlang=Python' ]] ||
+[[ "$(cat "${DEFAULT_PROJECT}/.docker-dev/project-tag")" == $'schema_version=1\nmodel=Python' ]] ||
     fail "build without --target did not tag the current directory"
 
 : > "$FAKE_LOG"
@@ -127,13 +127,13 @@ mkdir -p "${PROJECT_BASE}/Bun/bar"
         >"${TEST_ROOT}/local-priority.out" 2>&1
 ) || fail "run did not prioritize a local legacy project: $(cat "${TEST_ROOT}/local-priority.out")"
 grep -q '^run ' "$FAKE_LOG" || fail "local target match did not run a container"
-grep -q 'Project Type   : Bun' "${TEST_ROOT}/local-priority.out" ||
-    fail "local project language was not inferred from current language directory"
+grep -q 'Project Model  : Bun' "${TEST_ROOT}/local-priority.out" ||
+    fail "local project model was not inferred from current model directory"
 
 : > "$FAKE_LOG"
 rm -f "${FAKE_IMAGES}/dev.python"
 env ORG="$ORG" HOME="$HOME" PATH="$PATH" \
-    "$SCRIPT_DIR/docker-dev.sh" build --lang Python --target with-run -x -y \
+    "$SCRIPT_DIR/docker-dev.sh" build --model Python --target with-run -x -y \
     >"${TEST_ROOT}/build-run.out" 2>&1 ||
     fail "build -x command failed: $(cat "${TEST_ROOT}/build-run.out")"
 [[ -f "${PROJECT_BASE}/Python/with-run/.docker-dev/project-tag" ]] ||
@@ -166,7 +166,7 @@ rm -f "${FAKE_IMAGES}/dev.python"
 : > "$FAKE_LOG"
 set +e
 env ORG="$ORG" HOME="$HOME" PATH="$PATH" DDEV_TEST_FAIL_BUILD=1 \
-    "$SCRIPT_DIR/docker-dev.sh" build --lang Python --target failed-build -x -y \
+    "$SCRIPT_DIR/docker-dev.sh" build --model Python --target failed-build -x -y \
     >"${TEST_ROOT}/failed-build.out" 2>&1
 status=$?
 set -e

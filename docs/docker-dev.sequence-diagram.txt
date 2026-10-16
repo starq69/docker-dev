@@ -13,15 +13,15 @@ sequenceDiagram
         Script->>FS: valida permessi e path
     end
     Script->>Script: ex_validate_project()
-    Script->>Script: calcola P_NAME, P_TYPE, P_TARGET
+    Script->>Script: calcola P_NAME, P_MODEL, P_TARGET
     Script->>Script: imposta IMAGE_NAME e CONTAINER_NAME
     Script->>Script: docker_run_extra_args()
     Script->>User: mostra riepilogo e chiede conferma
     User-->>Script: conferma
     Script->>FS: applica template con apply-templates.sh
-    Script->>Lang: run_lang_pipeline()
-    Lang->>FS: trova script in langs/<type>/bin
-    Lang->>Lang: ordina script numerati
-    Lang->>Lang: esegue 10.*, 20.*, 30.* ...
-    Lang-->>Script: pipeline completata
+    Script->>Model: run_model_pipeline()
+    Model->>FS: trova script in root modello/<model>/bin
+    Model->>Model: ordina script numerati
+    Model->>Model: esegue 10.*, 20.*, 30.* ...
+    Model-->>Script: pipeline completata
     Script-->>User: exit 0

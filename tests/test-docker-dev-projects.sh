@@ -12,6 +12,8 @@ PROJECT_BASE="${TEST_ROOT}/REP/DEV"
 mkdir -p "${PROJECT_TOOL_ROOT}/langs/Python" \
     "${PROJECT_TOOL_ROOT}/langs/Perl" \
     "${PROJECT_TOOL_ROOT}/langs/Bun" \
+    "${PROJECT_TOOL_ROOT}/services/Postgres" \
+    "${PROJECT_TOOL_ROOT}/stacks/Web" \
     "${PROJECT_BASE}"
 
 fail() {
@@ -34,7 +36,7 @@ assert_success() {
     "$@" || fail "expected success; error='$DDEV_RESOLVE_ERROR'"
 }
 
-assert_failure_contains "unknown or unmanaged language" \
+assert_failure_contains "unknown or unmanaged model" \
     ddev_resolve_build_project "$PROJECT_TOOL_ROOT" "$PROJECT_BASE" Unknown project
 
 assert_failure_contains "must not contain '.' or '..'" \
@@ -44,7 +46,17 @@ assert_success ddev_resolve_build_project \
     "$PROJECT_TOOL_ROOT" "$PROJECT_BASE" Python nested/new-project
 [[ "$DDEV_PROJECT_DIR" == "${PROJECT_BASE}/Python/nested/new-project" ]] ||
     fail "relative build target resolved unexpectedly: $DDEV_PROJECT_DIR"
-[[ "$DDEV_PROJECT_LANG" == Python ]] || fail "build language was not retained"
+[[ "$DDEV_PROJECT_MODEL" == Python ]] || fail "build model was not retained"
+
+assert_success ddev_resolve_build_project \
+    "$PROJECT_TOOL_ROOT" "$PROJECT_BASE" Postgres app
+[[ "$DDEV_PROJECT_DIR" == "${PROJECT_BASE}/Postgres/app" &&
+    "$DDEV_PROJECT_MODEL" == Postgres ]] ||
+    fail "service model did not resolve as a build target"
+mkdir -p "${PROJECT_BASE}/Postgres/app"
+assert_success ddev_write_project_tag "${PROJECT_BASE}/Postgres/app" Postgres "$PROJECT_TOOL_ROOT"
+assert_success ddev_read_project_tag "${PROJECT_BASE}/Postgres/app" "$PROJECT_TOOL_ROOT"
+[[ "$DDEV_TAG_MODEL" == Postgres ]] || fail "service model tag did not round-trip"
 
 mkdir -p "${PROJECT_BASE}/Python/absolute"
 assert_success ddev_resolve_build_project \
@@ -54,9 +66,15 @@ assert_success ddev_resolve_build_project \
 
 assert_success ddev_write_project_tag "${PROJECT_BASE}/Python/absolute" Python "$PROJECT_TOOL_ROOT"
 assert_success ddev_read_project_tag "${PROJECT_BASE}/Python/absolute" "$PROJECT_TOOL_ROOT"
-[[ "$DDEV_TAG_LANG" == Python ]] || fail "tag language was not read"
-[[ "$(cat "${PROJECT_BASE}/Python/absolute/.docker-dev/project-tag")" == $'schema_version=1\nlang=Python' ]] ||
+[[ "$DDEV_TAG_MODEL" == Python ]] || fail "tag model was not read"
+[[ "$(cat "${PROJECT_BASE}/Python/absolute/.docker-dev/project-tag")" == $'schema_version=1\nmodel=Python' ]] ||
     fail "tag file has unexpected content"
+
+# Existing project tags using lang= remain readable.
+mkdir -p "${PROJECT_BASE}/Perl/legacy-tag/.docker-dev"
+printf 'schema_version=1\nlang=Perl\n' > "${PROJECT_BASE}/Perl/legacy-tag/.docker-dev/project-tag"
+assert_success ddev_read_project_tag "${PROJECT_BASE}/Perl/legacy-tag" "$PROJECT_TOOL_ROOT"
+[[ "$DDEV_TAG_MODEL" == Perl ]] || fail "legacy language tag was not read as a model"
 
 previous_directory="$PWD"
 cd "${PROJECT_BASE}/Python/absolute"
@@ -64,7 +82,7 @@ assert_success ddev_resolve_build_project "$PROJECT_TOOL_ROOT" "$PROJECT_BASE" P
 [[ "$DDEV_PROJECT_DIR" == "${PROJECT_BASE}/Python/absolute" ]] ||
     fail "build without target did not resolve to the current directory"
 assert_success ddev_resolve_run_project "$PROJECT_TOOL_ROOT" "$PROJECT_BASE" ""
-[[ "$DDEV_PROJECT_DIR" == "${PROJECT_BASE}/Python/absolute" && "$DDEV_PROJECT_LANG" == Python ]] ||
+[[ "$DDEV_PROJECT_DIR" == "${PROJECT_BASE}/Python/absolute" && "$DDEV_PROJECT_MODEL" == Python ]] ||
     fail "run without target did not use current directory and its tag"
 cd "$previous_directory"
 
@@ -75,7 +93,7 @@ cd "${PROJECT_BASE}/Python"
 assert_success ddev_resolve_run_project "$PROJECT_TOOL_ROOT" "$PROJECT_BASE" single
 [[ "$DDEV_PROJECT_DIR" == "${PROJECT_BASE}/Python/single" ]] ||
     fail "run did not resolve the unique matching target"
-[[ "$DDEV_PROJECT_LANG" == Python ]] || fail "run did not derive language from project tag"
+[[ "$DDEV_PROJECT_MODEL" == Python ]] || fail "run did not derive model from project tag"
 cd "$previous_directory"
 
 mkdir -p "${PROJECT_BASE}/Perl/single"
@@ -83,7 +101,7 @@ assert_success ddev_write_project_tag "${PROJECT_BASE}/Perl/single" Perl "$PROJE
 
 assert_success ddev_resolve_run_project \
     "$PROJECT_TOOL_ROOT" "$PROJECT_BASE" "${PROJECT_BASE}/Perl/single"
-[[ "$DDEV_PROJECT_LANG" == Perl ]] || fail "absolute run target did not use tag language"
+[[ "$DDEV_PROJECT_MODEL" == Perl ]] || fail "absolute run target did not use tag model"
 
 mkdir -p "${PROJECT_BASE}/Bun" "${PROJECT_BASE}/Bun/bar" "${PROJECT_BASE}/Python/bar"
 mkdir -p "${PROJECT_BASE}/Python/bar/.docker-dev"
@@ -91,8 +109,8 @@ printf 'schema_version=1\nlang=Python\n' > "${PROJECT_BASE}/Python/bar/.docker-d
 previous_directory="$PWD"
 cd "${PROJECT_BASE}/Bun"
 assert_success ddev_resolve_run_project "$PROJECT_TOOL_ROOT" "$PROJECT_BASE" bar
-[[ "$DDEV_PROJECT_DIR" == "${PROJECT_BASE}/Bun/bar" && "$DDEV_PROJECT_LANG" == Bun ]] ||
-    fail "local target did not take precedence over another language's project"
+[[ "$DDEV_PROJECT_DIR" == "${PROJECT_BASE}/Bun/bar" && "$DDEV_PROJECT_MODEL" == Bun ]] ||
+    fail "local target did not take precedence over another model's project"
 [[ ! -e "${PROJECT_BASE}/Bun/bar/.docker-dev/project-tag" ]] ||
     fail "run resolver unexpectedly wrote a legacy project tag"
 cd "$previous_directory"
@@ -111,14 +129,14 @@ mkdir -p "${PROJECT_BASE}/Python/no-tag"
 previous_directory="$PWD"
 cd "${PROJECT_BASE}/Python"
 assert_success ddev_resolve_run_project "$PROJECT_TOOL_ROOT" "$PROJECT_BASE" no-tag
-[[ "$DDEV_PROJECT_LANG" == Python ]] ||
-    fail "legacy project without a tag did not infer its language from the current directory"
+[[ "$DDEV_PROJECT_MODEL" == Python ]] ||
+    fail "legacy project without a tag did not infer its model from the current directory"
 cd "$previous_directory"
 
 mkdir -p "${TEST_ROOT}/outside/no-tag"
 previous_directory="$PWD"
 cd "${TEST_ROOT}/outside"
-assert_failure_contains "language cannot be inferred" \
+assert_failure_contains "model cannot be inferred" \
     ddev_resolve_run_project "$PROJECT_TOOL_ROOT" "$PROJECT_BASE" no-tag
 cd "$previous_directory"
 
@@ -130,27 +148,60 @@ assert_failure_contains "unsupported project tag schema_version" \
 PIPELINE_ROOT="${TEST_ROOT}/pipeline"
 PIPELINE_LOG="${TEST_ROOT}/pipeline.log"
 mkdir -p "${PIPELINE_ROOT}/langs/Fixture/bin"
-for script_name in 20.build.sh 30.run.sh 40.setup-volumes.sh; do
-    cat > "${PIPELINE_ROOT}/langs/Fixture/bin/${script_name}" <<'SCRIPT'
+mkdir -p "${PIPELINE_ROOT}/services/Postgres/bin" "${PIPELINE_ROOT}/stacks/Web/bin"
+for model_bin in "${PIPELINE_ROOT}/langs/Fixture/bin" \
+    "${PIPELINE_ROOT}/services/Postgres/bin" "${PIPELINE_ROOT}/stacks/Web/bin"; do
+    for script_name in 20.build.sh 30.run.sh 40.setup-volumes.sh; do
+    cat > "${model_bin}/${script_name}" <<'SCRIPT'
 #!/usr/bin/env bash
 printf '%s\n' "${0##*/}" >> "$DDEV_TEST_PIPELINE_LOG"
 SCRIPT
-    chmod +x "${PIPELINE_ROOT}/langs/Fixture/bin/${script_name}"
+    chmod +x "${model_bin}/${script_name}"
+    done
 done
 
 export DDEV_TEST_PIPELINE_LOG="$PIPELINE_LOG"
-ddev_run_lang_operation "$PIPELINE_ROOT" "$TEST_ROOT/project" Fixture fixture-image fixture-container build
+ddev_run_model_operation "$PIPELINE_ROOT" "$TEST_ROOT/project" Fixture fixture-image fixture-container build
 [[ "$(cat "$PIPELINE_LOG")" == $'40.setup-volumes.sh\n20.build.sh' ]] ||
     fail "build operation ran unexpected pipeline steps: $(cat "$PIPELINE_LOG")"
 
 : > "$PIPELINE_LOG"
-ddev_run_lang_operation "$PIPELINE_ROOT" "$TEST_ROOT/project" Fixture fixture-image fixture-container run
+ddev_run_model_operation "$PIPELINE_ROOT" "$TEST_ROOT/project" Fixture fixture-image fixture-container run
 [[ "$(cat "$PIPELINE_LOG")" == $'40.setup-volumes.sh\n30.run.sh' ]] ||
     fail "run operation ran unexpected pipeline steps: $(cat "$PIPELINE_LOG")"
 
 : > "$PIPELINE_LOG"
-ddev_run_lang_operation "$PIPELINE_ROOT" "$TEST_ROOT/project" Fixture fixture-image fixture-container run-only
+ddev_run_model_operation "$PIPELINE_ROOT" "$TEST_ROOT/project" Fixture fixture-image fixture-container run-only
 [[ "$(cat "$PIPELINE_LOG")" == '30.run.sh' ]] ||
     fail "run-only operation repeated setup: $(cat "$PIPELINE_LOG")"
+
+ddev_run_model_operation "$PIPELINE_ROOT" "$TEST_ROOT/project" Postgres postgres-image postgres-container build
+[[ "$(tail -n 2 "$PIPELINE_LOG")" == $'40.setup-volumes.sh\n20.build.sh' ]] ||
+    fail "service model did not use its own pipeline"
+
+: > "$PIPELINE_LOG"
+ddev_run_model_operation "$PIPELINE_ROOT" "$TEST_ROOT/project" Web web-image web-container run-only
+[[ "$(cat "$PIPELINE_LOG")" == '30.run.sh' ]] ||
+    fail "stack model did not use its own pipeline"
+
+AMBIGUOUS_ROOT="${TEST_ROOT}/ambiguous-tool"
+mkdir -p "${AMBIGUOUS_ROOT}/langs/Shared" "${AMBIGUOUS_ROOT}/services/Shared"
+if ddev_cli_find_model_dir "$AMBIGUOUS_ROOT" Shared; then
+    fail "duplicate model names across roots were not rejected"
+fi
+[[ "$DDEV_RESOLVE_ERROR" == *"ambiguous model"* ]] ||
+    fail "duplicate model diagnostic was not explicit: $DDEV_RESOLVE_ERROR"
+
+TEMPLATE_ROOT="${TEST_ROOT}/template-tool"
+TEMPLATE_PROJECT="${TEST_ROOT}/template-project"
+mkdir -p "${TEMPLATE_ROOT}/services/Postgres/templates" "${TEMPLATE_ROOT}/.settings"
+cp "${SCRIPT_DIR}/apply-templates.sh" "${TEMPLATE_ROOT}/apply-templates.sh"
+cp "${SCRIPT_DIR}/docker-dev-cli.sh" "${TEMPLATE_ROOT}/docker-dev-cli.sh"
+printf 'standard bashrc\n' > "${TEMPLATE_ROOT}/.settings/.bashrc"
+printf '.bash_history\n' > "${TEMPLATE_ROOT}/.settings/.gitignore"
+printf 'postgres template\n' > "${TEMPLATE_ROOT}/services/Postgres/templates/Dockerfile"
+bash "${TEMPLATE_ROOT}/apply-templates.sh" "$TEMPLATE_PROJECT" Postgres >/dev/null
+[[ "$(cat "${TEMPLATE_PROJECT}/Dockerfile")" == 'postgres template' ]] ||
+    fail "service model templates were not selected from services/"
 
 printf 'docker-dev project resolution and tag tests passed\n'

@@ -7,7 +7,7 @@ set -euo pipefail
 # Argomenti:
 #   -o        (opzionale) sovrascrive i file già presenti nella destinazione
 #   $1 PROJECT_DIR
-#   $2 P_TYPE
+#   $2 MODEL
 
 OVERWRITE=0
 while getopts ":o" opt; do
@@ -19,10 +19,15 @@ done
 shift $((OPTIND - 1))
 
 PROJECT_DIR="$1"
-P_TYPE="$2"
+MODEL="$2"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-TEMPLATES_DIR="${SCRIPT_DIR}/langs/${P_TYPE}/templates"
+source "${SCRIPT_DIR}/docker-dev-cli.sh"
+if ! ddev_cli_find_model_dir "$SCRIPT_DIR" "$MODEL"; then
+    echo "[files] ERROR: $DDEV_RESOLVE_ERROR" >&2
+    exit 1
+fi
+TEMPLATES_DIR="${DDEV_MODEL_DIR}/templates"
 SETTINGS_DIR="${SCRIPT_DIR}/.settings"
 STANDARD_BASHRC="${SETTINGS_DIR}/.bashrc"
 
@@ -65,7 +70,7 @@ copy_file_no_clobber() {
 # Copia ricorsiva, senza sovrascrivere file esistenti.
 # Nota: la cartella .docker_container dei templates è esclusa (prune):
 # il contenuto consegnato al progetto viene generato da
-# apply_docker_container() componendo i pezzi opzionali per linguaggio
+# apply_docker_container() componendo i pezzi opzionali del modello
 # con lo standard .settings/.bashrc.
 copy_tree_no_clobber() {
     local src_root="$1"
@@ -104,7 +109,7 @@ apply_docker_container() {
     local body_file="${dc_src}/.bashrc.body"
     local tail_file="${dc_src}/.bashrc.tail"
 
-    # .bashrc.body assente: .bashrc e' la versione specifica del linguaggio
+    # .bashrc.body assente: .bashrc e' la versione specifica del modello
     if [[ ! -f "$body_file" && -f "${dc_src}/.bashrc" ]]; then
         body_file="${dc_src}/.bashrc"
     fi
