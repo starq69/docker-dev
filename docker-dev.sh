@@ -303,13 +303,13 @@ project_setup() {
       return 1
     fi
 
-    if is_absolute "_full_target"; then
+    if is_absolute "$_full_target"; then
       echo "$_tag cannot create new absolute path $1"
       echo "$_tag use relative path instead"
       return 1
     fi
 
-    if ! is_valid "_full_target"; then
+    if ! is_valid "$_full_target"; then
       echo "$_tag $1 is NOT valid"
       return 1
     fi
