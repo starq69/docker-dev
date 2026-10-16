@@ -8,7 +8,7 @@ Questo documento descrive il design approvato per i requisiti concordati. Il par
 
 ### Decisioni approvate
 
-- Mantenere temporaneamente il dispatch legacy senza subcomando, con comportamento attuale e avviso.
+- Mantenere temporaneamente il dispatch legacy senza subcomando e preservarne il comportamento. L'avviso di deprecazione è ancora da implementare.
 - Accettare target assoluti per `build` e `run`, rispettando il tag del progetto.
 - Usare il tag testuale `.docker-dev/project-tag` con `schema_version` e `lang`.
 - `run --target` relativo cerca esclusivamente sotto `$PWD`; se il target non esiste lì, fallisce senza ricerca globale.
@@ -37,7 +37,7 @@ La conferma di `build` deve avvenire una sola volta, prima degli effetti collate
 
 La sintassi senza subcomando avvia oggi la pipeline completa, che comprende preparazione, build condizionale e run. Non va reinterpretata come il nuovo `run`, perché `run` non effettua build implicite.
 
-Mantenere temporaneamente un dispatch legacy per le invocazioni senza subcomando, preservandone il comportamento e il parsing attuali, con un avviso che suggerisca il comando esplicito. La vecchia forma del target, che include il linguaggio (per esempio `Python/foo`), resta valida solo nel percorso legacy. La rimozione del percorso legacy richiede una decisione successiva e documentata.
+Mantenere temporaneamente un dispatch legacy per le invocazioni senza subcomando, preservandone il comportamento e il parsing attuali. La vecchia forma del target, che include il linguaggio (per esempio `Python/foo`), resta valida solo nel percorso legacy. L'avviso di deprecazione è auspicabile ma non è presente nel codice corrente; la rimozione del percorso legacy richiede una decisione successiva e documentata.
 
 Il parser deve distinguere il subcomando iniziale dalle opzioni e inoltrare gli argomenti del container solo quando previsto dal contratto del comando; non deve reinterpretare opzioni dopo un eventuale delimitatore `--`.
 
@@ -169,7 +169,7 @@ docker-dev build --lang Python --target my-app -y
 # Run del progetto corrente; il linguaggio proviene dal tag
 docker-dev run
 
-# Ricerca di un target relativo sotto i linguaggi gestiti
+# Run di un target relativo sotto la directory corrente
 docker-dev run --target my-app
 ```
 
@@ -178,7 +178,7 @@ La guida d'uso dovrà inoltre spiegare:
 - il formato e la posizione del tag, quando viene creato e come diagnosticare un tag non valido;
 - che `run` non costruisce l'immagine e non scrive il tag;
 - come vengono risolti target assenti, relativi e assoluti, precisando che un target relativo di `run` non viene cercato fuori da `$PWD`;
-- la compatibilità transitoria e l'avviso associato alla sintassi legacy;
+- la compatibilità transitoria della sintassi legacy; l'avviso di deprecazione non è ancora implementato;
 - gli errori CLI con esempi d'uso corretti e codici di uscita significativi.
 
 ## Sequenza di lavoro suggerita
@@ -186,6 +186,6 @@ La guida d'uso dovrà inoltre spiegare:
 1. Dispatch e parsing isolabili, con test del contratto CLI (implementati).
 2. Risoluzione target/tag e test di errore, inclusa la priorità del target locale (implementati).
 3. Flussi build/run, con verifica che `run` non costruisca e test dell'ordine setup/build/run (implementati con Docker simulato).
-4. Scrivere/aggiornare la guida utente sui comportamenti effettivamente collaudati e completare una verifica con Docker reale.
+4. Aggiornare la guida utente sui comportamenti effettivamente collaudati (documentato in [docker-dev-usage.md](./docker-dev-usage.md)); resta da completare una verifica con Docker reale.
 
 I commit dovrebbero seguire unità coerenti e verificabili, non singole micro-modifiche: dispatch/CLI, risoluzione e tag, flussi/test, documentazione finale. La CR rev. 2 resta fuori perimetro fino alla successiva integrazione concordata.
