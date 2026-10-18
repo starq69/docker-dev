@@ -2,17 +2,18 @@
 
 ## Stato
 
-Documento di discussione. Descrive un'ipotesi di evoluzione del resolver di
-`docker-dev`; non modifica né sostituisce la specifica attuale dei subcomandi e
-non implica che il comportamento sia già implementato.
+Documento di design per l'evoluzione del resolver di `docker-dev`; non modifica
+né sostituisce la specifica attuale dei subcomandi e non implica che il
+comportamento descritto sia già implementato. Le decisioni approvate in questo
+documento sono requisiti di design per l'implementazione.
 
 Le decisioni sono divise in:
 
-- **Confermato per questa ipotesi**: perimetro della scansione, metadato
-  specifico per l'istanza e criterio di precedenza tra tag di istanza e
-  convenzione legacy.
-- **Da confermare**: comportamento in caso di conflitto con `--model`
-  esplicito e base di risoluzione dei target relativi.
+- **Approvato**: perimetro della scansione, metadato specifico per l'istanza,
+  criterio di precedenza tra tag, comportamento in caso di conflitto con
+  `--model` esplicito, base dei target relativi e politiche del punto 6.
+- **Da confermare**: dettagli operativi non risolti, tra cui overwrite del tag
+  d'istanza e contenuto esatto di `info --tag`.
 
 ## 1. Terminologia
 
@@ -168,7 +169,7 @@ Queste decisioni definiscono il comportamento ipotizzato di ricerca delle
 istanze, non tutti i dettagli di precedenza tra i metadati di istanza e di
 progetto.
 
-## 5. Decisioni ancora da confermare
+## 5. Decisioni approvate
 
 ### 5.1 `--model` esplicito in conflitto con il tag di istanza
 
@@ -179,17 +180,10 @@ cd "$BASE/bun-team"   # instance-tag: model=Bun
 docker-dev build --model=Python --target=app
 ```
 
-Possibili politiche:
-
-- fallire con un errore di mismatch;
-- consentire l'override esplicito e documentarlo;
-- usare sempre il model del tag, rendendo `--model` ridondante in quel
-  contesto.
-
-**Raccomandazione**: fallire sul conflitto. Un tag di istanza deve esprimere
-un'associazione affidabile e il rifiuto evita di creare progetti nella root
-con template/pipeline inattesi. L'eventuale override dovrebbe richiedere
-un'opzione separata e intenzionale, non essere implicito.
+Se `--model` esplicito contrasta con il model del tag d'istanza, `build` deve
+fallire con un errore di mismatch prima di creare o modificare il progetto.
+L'eventuale override richiederebbe un'opzione separata e intenzionale; non è
+implicito.
 
 ### 5.2 Base di risoluzione di `--target` relativo
 
@@ -200,21 +194,15 @@ cd "$BASE/bun-team"
 docker-dev build --target=test/hello
 ```
 
-Se il model viene dedotto dal tag, sono possibili due destinazioni:
-
-- **Root dell'istanza**: `$BASE/bun-team/test/hello`.
-- **Root canonica del model**: `$BASE/Bun/test/hello`.
-
-**Raccomandazione**: creare il target sotto la root dell'istanza che ha
-fornito il contesto (`$BASE/bun-team/test/hello`). In questo modo una root
-taggata identifica sia il model applicabile sia il contenitore dei suoi
-progetti; scrivere nella root canonica renderebbe la directory personalizzata
-simile a un alias e potrebbe sorprendere l'utente.
+Con un'istanza riconosciuta, il target relativo va creato sotto la root
+dell'istanza che fornisce il contesto, per esempio
+`$BASE/bun-team/test/hello`, usando il model associato per template e pipeline.
+Non va reindirizzato alla root canonica `$BASE/Bun`.
 
 Con `--model` esplicito eseguito fuori da un'istanza riconosciuta, il
-comportamento esistente può restare invariato: target relativo sotto
-`$BASE/<model>/<target>`. Se `--model` è esplicito dentro un'istanza taggata,
-la destinazione dipende dalla decisione del punto 5.1.
+target relativo resta sotto `$BASE/<model>/<target>`. Se `--model` è esplicito
+dentro un'istanza taggata, si applica il controllo di mismatch del punto 5.1;
+se coincide, il target resta sotto la root dell'istanza.
 
 ## 6. Relazione tra project tag e instance tag
 
@@ -222,7 +210,7 @@ Il project tag esistente registra il model dopo una build riuscita. Il tag di
 istanza dà invece un contesto ai progetti contenuti nella directory, inclusi
 quelli senza project tag.
 
-Politica raccomandata:
+Politiche approvate:
 
 - se il project tag è presente e valido, usarlo come identità specifica del
   progetto;
@@ -232,10 +220,17 @@ Politica raccomandata:
 - senza nessuna fonte valida, fallire: non dedurre il model da nomi o contenuti
   arbitrari del progetto.
 
-Un project tag malformato non dovrebbe essere ignorato per ripiegare sul tag
-di istanza. La gestione precisa del conflitto project/instance tag va
-confermata prima dell'implementazione; la raccomandazione è fallire
-esplicitamente.
+- Un project tag malformato deve causare un errore esplicito; non va ignorato
+  per ripiegare sul tag di istanza o sull'inferenza legacy.
+- In `build`, se il project tag esiste, va letto e validato prima di applicare
+  template o avviare setup/build. Un tag malformato o il cui model non coincide
+  con il model effettivo selezionato causa un errore e non viene sovrascritto.
+- Se il project tag manca, `build` può procedere con il model effettivo; scrive
+  il project tag in modo atomico solo dopo il successo di setup e build.
+- In `run`, un project tag malformato o in conflitto con il tag d'istanza causa
+  un errore esplicito; non si applica alcun fallback. Se il project tag manca,
+  si usa il tag d'istanza più vicino o, in sua assenza, l'inferenza legacy
+  approvata.
 
 ## 7. Impatto d'integrazione stimato
 
