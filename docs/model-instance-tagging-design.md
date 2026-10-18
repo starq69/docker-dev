@@ -1,4 +1,4 @@
-# Ipotesi di design: istanze di progetto associate a un model
+# Design: istanze di progetto associate a un model
 
 ## Stato
 
@@ -9,11 +9,11 @@ documento sono requisiti di design per l'implementazione.
 
 Le decisioni sono divise in:
 
-- **Approvato**: perimetro della scansione, metadato specifico per l'istanza,
-  criterio di precedenza tra tag, comportamento in caso di conflitto con
-  `--model` esplicito, base dei target relativi e politiche del punto 6.
-- **Da confermare**: dettagli operativi non risolti, tra cui overwrite del tag
-  d'istanza e contenuto esatto di `info --tag`.
+- **Approvato**: il design del punto 3, i nomi e le posizioni `instance-tag` e
+  `project-tag`, il formato dei metadati e le politiche dei punti 5 e 6.
+- **Da confermare**: dettagli operativi del comando `tag`, in particolare la
+  risoluzione dei target relativi/assoluti e la gestione di un tag d'istanza
+  già esistente.
 
 ## 1. Terminologia
 
@@ -58,7 +58,7 @@ Il nome della directory e il model sono quindi implicitamente accoppiati per
 le istanze senza tag. Un nome personalizzato come `$BASE/bun-team` non offre
 attualmente un modo per dedurre `Bun` dalla sola struttura del percorso.
 
-## 3. Ipotesi proposta
+## 3. Design approvato
 
 Associare esplicitamente un'istanza a un model mediante un tag di istanza
 separato dal tag del singolo progetto. La ricerca del tag parte da `$PWD` e
@@ -67,21 +67,21 @@ Il primo tag incontrato è quello dell'istanza applicabile.
 
 ### 3.1 Metadato dell'istanza
 
-Posizione proposta:
+Posizione e nome del file-tag confermati (`instance-tag`):
 
 ```text
 <instance-root>/.docker-dev/instance-tag
 ```
 
-Formato proposto:
+Formato confermato:
 
 ```text
 schema_version=1
 model=Bun
 ```
 
-Il percorso e il nome `instance-tag` sono una proposta concreta da confermare.
-Il file è distinto da:
+Il file dell'istanza è distinto dal file del progetto, collocato nella posizione
+confermata:
 
 ```text
 <project>/.docker-dev/project-tag
@@ -89,13 +89,13 @@ Il file è distinto da:
 
 Il tag di istanza descrive la directory condivisa da più progetti; il tag di
 progetto continua a descrivere il model registrato per uno specifico progetto.
-Il parser dovrebbe applicare validazioni analoghe a quelle del project tag:
+Il parser deve applicare validazioni analoghe a quelle del project tag:
 schema supportato, un solo model non vuoto, model gestito e nessun campo
 duplicato o sconosciuto.
 
 ### 3.2 Comando per taggare un'istanza
 
-Interfaccia proposta:
+Interfaccia confermata:
 
 ```text
 docker-dev tag --model <model> [--target <directory>]
@@ -133,19 +133,19 @@ Il fallback basato sul nome preserva il layout corrente, per esempio
 `$BASE/Bun/app` senza tag di istanza. La presenza di un tag di istanza più
 vicino prevale sulla convenzione del nome.
 
-Se il tag più vicino è malformato, l'ipotesi raccomandata è fallire
-esplicitamente, senza ignorarlo e continuare la ricerca nei parent.
+Se il tag più vicino è malformato, la risoluzione deve fallire esplicitamente,
+senza ignorarlo e continuare la ricerca nei parent.
 
 ### 3.4 Comando informativo
 
-Interfaccia proposta:
+Interfaccia confermata:
 
 ```text
 docker-dev info --tag
 ```
 
-Il comando dovrebbe aiutare a diagnosticare i metadati applicabili partendo
-dalla directory corrente. Una proposta utile è mostrare:
+Il comando deve aiutare a diagnosticare i metadati applicabili partendo dalla
+directory corrente e mostrare:
 
 - il project tag presente nel progetto corrente, se esiste;
 - il tag di istanza più vicino trovato entro `$BASE`, se esiste;
@@ -153,10 +153,7 @@ dalla directory corrente. Una proposta utile è mostrare:
   fallback legacy);
 - eventuali conflitti o tag non validi.
 
-Resta da confermare se `info --tag` debba mostrare solo il tag effettivo oppure
-tutti i tag rilevanti trovati.
-
-## 4. Decisioni confermate per questa ipotesi
+## 4. Decisioni approvate
 
 1. **Limite della ricerca**: la scansione dei parent si arresta a `$BASE`.
 2. **Metadato separato**: il tag di istanza ha un nome/percorso distinto dal
@@ -165,9 +162,9 @@ tutti i tag rilevanti trovati.
    risalendo da `$PWD`; se non esiste, si mantiene il fallback legacy basato
    sulla corrispondenza del nome della directory con un model gestito.
 
-Queste decisioni definiscono il comportamento ipotizzato di ricerca delle
-istanze, non tutti i dettagli di precedenza tra i metadati di istanza e di
-progetto.
+Queste decisioni definiscono il comportamento approvato di ricerca delle
+istanze. La precedenza tra i metadati di istanza e di progetto è definita al
+punto 6.
 
 ## 5. Decisioni approvate
 
@@ -261,9 +258,9 @@ Non è una modifica confinata alla sola visualizzazione dei tag.
   esplicito concorde/in conflitto, project tag mancante/valido/malformato e
   `info --tag`.
 - **Documentazione**: aggiornare la guida e integrare la specifica dei
-  subcomandi solo dopo la conferma delle decisioni aperte.
+  subcomandi dopo aver definito i dettagli operativi ancora aperti.
 
-## 8. Esempio del flusso ipotizzato
+## 8. Esempio del flusso approvato
 
 ```bash
 mkdir -p "$BASE/bun-team"
@@ -274,9 +271,6 @@ docker-dev info --tag
 docker-dev build --target=test/hello
 ```
 
-Con la raccomandazione del punto 5.2, il progetto viene creato in
+Il progetto viene creato in
 `$BASE/bun-team/test/hello`, usa template e pipeline di `Bun` e riceve il
 proprio `.docker-dev/project-tag` al termine positivo della build.
-
-Il comportamento esatto dell'ultimo comando resta subordinato alla conferma
-delle decisioni 5.1 e 5.2.
