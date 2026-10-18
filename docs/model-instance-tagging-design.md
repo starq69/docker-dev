@@ -13,7 +13,7 @@ Le decisioni sono divise in:
   `project-tag`, il formato dei metadati e le politiche dei punti 5 e 6.
 - **Da confermare**: dettagli operativi del comando `tag`, in particolare la
   risoluzione dei target relativi/assoluti e la gestione di un tag d'istanza
-  già esistente, e la deduzione del model per target assoluti esterni a `$BASE`.
+  già esistente.
 
 ## 1. Terminologia
 
@@ -119,18 +119,27 @@ Per determinare il contesto di un progetto:
 1. Normalizzare `$PWD`, il target selezionato e `$BASE`.
 2. Usare `$PWD` come punto di partenza quando il target non è assoluto. Per un
   target assoluto, usare la directory selezionata come punto di partenza.
-3. Esaminare il punto di partenza e i suoi parent, risalendo fino a `$BASE`
-  incluso.
-4. Fermarsi al **primo** `.docker-dev/instance-tag` trovato e validarlo.
-5. Se non si trova un tag di istanza, applicare il fallback legacy: riconoscere
-   una directory root il cui nome coincide con un model gestito.
-6. Se non si trova né un tag né una root legacy, il model non è deducibile e
-   l'operazione che ne richiede uno fallisce con un errore esplicito.
+3. Se il punto di partenza è `$BASE` o una sua discendente, esaminare il punto
+  di partenza e i parent fino a `$BASE` incluso. Se è esterno a `$BASE`, non
+  cercare instance tag nei parent.
+4. Quando la scansione è ammessa, fermarsi al **primo**
+  `.docker-dev/instance-tag` trovato e validarlo.
+5. Solo dentro `$BASE`, se non si trova un instance tag, applicare il fallback
+  legacy: riconoscere una directory root il cui nome coincide con un model
+  gestito.
+6. Per un target assoluto esterno a `$BASE`, dedurre il model esclusivamente
+  da un `--model` esplicito e gestito oppure dal project tag valido nella
+  directory selezionata. Se nessuna fonte valida è disponibile, fallire
+  esplicitamente.
+7. In ogni caso, se non si trova una fonte valida del model, fallire: non
+  dedurlo da nomi o contenuti arbitrari del progetto.
 
 La scansione non deve continuare sopra `$BASE`: un tag in una directory
 genitrice esterna all'albero dei progetti non deve influenzare il risultato.
-Tag di istanza annidati sono compatibili con la regola del primo tag: prevale
-quello più vicino a `$PWD`.
+Per target assoluti esterni a `$BASE` la scansione dei parent è disabilitata,
+anche se incontra un altro percorso root prima di `/`. Tag di istanza annidati
+sono compatibili con la regola del primo tag: prevale quello più vicino al
+punto di partenza.
 
 Il fallback basato sul nome preserva il layout corrente, per esempio
 `$BASE/Bun/app` senza tag di istanza. La presenza di un tag di istanza più
@@ -163,9 +172,10 @@ directory corrente e mostrare:
    tag del progetto.
 3. **Precedenza dell'istanza**: prevale il primo tag di istanza trovato
   risalendo dal contesto selezionato; per un target assoluto il contesto è la
-  directory selezionata, altrimenti è `$PWD`. Se non esiste un tag, si mantiene
-  il fallback legacy basato sulla corrispondenza del nome della directory con
-  un model gestito.
+  directory selezionata, altrimenti è `$PWD`. La scansione si applica solo
+  dentro `$BASE`; fuori da `$BASE` il model proviene solo dal project tag della
+  directory selezionata o da `--model` esplicito. Il fallback legacy si applica
+  solo dentro `$BASE`.
 
 Queste decisioni definiscono il comportamento approvato di ricerca delle
 istanze. La precedenza tra i metadati di istanza e di progetto è definita al
@@ -239,19 +249,12 @@ Politiche approvate:
 
 ## Elenco dei punti critici, indesiderati o da rettificare
 
-- **Target assoluto esterno a `$BASE`**: la ricerca dell'instance tag parte
-  dalla directory selezionata e risale i parent. Se tale directory non è
-  `$BASE` né una sua discendente, `$BASE` non verrà mai incontrata; un ciclo
-  che continui fino a esaurire i parent raggiungerebbe `/`. Potrebbe così
-  trovare un `.docker-dev/instance-tag` estraneo al perimetro del progetto e
-  usarlo per dedurre il model, con risultati inattesi e un confine di ricerca
-  troppo ampio.
-  **Da decidere prima dell'implementazione**: il resolver deve verificare la
-  discendenza da `$BASE` prima della scansione. Mitigazione raccomandata: fuori
-  da `$BASE` non cercare instance tag nei parent; accettare come fonti del model
-  soltanto il project tag della directory selezionata o un `--model` esplicito
-  e coerente, altrimenti fallire. Non proseguire mai implicitamente la ricerca
-  fino a `/`.
+- **Target assoluto esterno a `$BASE` (decisione approvata)**: fuori da `$BASE`
+  non cercare instance tag nei parent né applicare l'inferenza legacy dalla
+  root. Accettare come fonti del model soltanto un `--model` esplicito e
+  gestito oppure il project tag valido nella directory selezionata; in assenza
+  di entrambe, fallire. Questo evita di trovare tag estranei e di proseguire
+  implicitamente la ricerca fino a `/`.
 
 ## 7. Impatto d'integrazione stimato
 
