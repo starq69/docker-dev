@@ -13,7 +13,7 @@ Le decisioni sono divise in:
   `project-tag`, il formato dei metadati e le politiche dei punti 5 e 6.
 - **Da confermare**: dettagli operativi del comando `tag`, in particolare la
   risoluzione dei target relativi/assoluti e la gestione di un tag d'istanza
-  già esistente.
+  già esistente, e la deduzione del model per target assoluti esterni a `$BASE`.
 
 ## 1. Terminologia
 
@@ -61,9 +61,9 @@ attualmente un modo per dedurre `Bun` dalla sola struttura del percorso.
 ## 3. Design approvato
 
 Associare esplicitamente un'istanza a un model mediante un tag di istanza
-separato dal tag del singolo progetto. La ricerca del tag parte da `$PWD` e
-risale i parent directory fino al primo tag trovato, senza oltrepassare `$BASE`.
-Il primo tag incontrato è quello dell'istanza applicabile.
+separato dal tag del singolo progetto. La ricerca del tag risale i parent
+directory dal contesto selezionato fino al primo tag trovato, senza
+oltrepassare `$BASE`. Il primo tag incontrato è quello dell'istanza applicabile.
 
 ### 3.1 Metadato dell'istanza
 
@@ -116,12 +116,15 @@ progetti senza che il suo nome debba essere `Bun`.
 
 Per determinare il contesto di un progetto:
 
-1. Normalizzare `$PWD` e `$BASE`.
-2. Esaminare `$PWD` e i suoi parent, risalendo fino a `$BASE` incluso.
-3. Fermarsi al **primo** `.docker-dev/instance-tag` trovato e validarlo.
-4. Se non si trova un tag di istanza, applicare il fallback legacy: riconoscere
+1. Normalizzare `$PWD`, il target selezionato e `$BASE`.
+2. Usare `$PWD` come punto di partenza quando il target non è assoluto. Per un
+  target assoluto, usare la directory selezionata come punto di partenza.
+3. Esaminare il punto di partenza e i suoi parent, risalendo fino a `$BASE`
+  incluso.
+4. Fermarsi al **primo** `.docker-dev/instance-tag` trovato e validarlo.
+5. Se non si trova un tag di istanza, applicare il fallback legacy: riconoscere
    una directory root il cui nome coincide con un model gestito.
-5. Se non si trova né un tag né una root legacy, il model non è deducibile e
+6. Se non si trova né un tag né una root legacy, il model non è deducibile e
    l'operazione che ne richiede uno fallisce con un errore esplicito.
 
 La scansione non deve continuare sopra `$BASE`: un tag in una directory
@@ -159,8 +162,10 @@ directory corrente e mostrare:
 2. **Metadato separato**: il tag di istanza ha un nome/percorso distinto dal
    tag del progetto.
 3. **Precedenza dell'istanza**: prevale il primo tag di istanza trovato
-   risalendo da `$PWD`; se non esiste, si mantiene il fallback legacy basato
-   sulla corrispondenza del nome della directory con un model gestito.
+  risalendo dal contesto selezionato; per un target assoluto il contesto è la
+  directory selezionata, altrimenti è `$PWD`. Se non esiste un tag, si mantiene
+  il fallback legacy basato sulla corrispondenza del nome della directory con
+  un model gestito.
 
 Queste decisioni definiscono il comportamento approvato di ricerca delle
 istanze. La precedenza tra i metadati di istanza e di progetto è definita al
@@ -214,8 +219,11 @@ Politiche approvate:
 - se è presente anche un instance tag, richiedere che i due model coincidano;
 - se il project tag manca, usare il model dell'instance tag più vicino;
 - senza instance tag, mantenere l'inferenza legacy dal nome della root;
-- senza nessuna fonte valida, fallire: non dedurre il model da nomi o contenuti
-  arbitrari del progetto.
+- un `--model` esplicito e gestito può fornire il model quando non è disponibile
+  una fonte deducibile; deve comunque coincidere con i tag presenti;
+- senza project tag valido, instance tag, root legacy o `--model` esplicito
+  gestito, fallire: non dedurre il model da nomi o contenuti arbitrari del
+  progetto.
 
 - Un project tag malformato deve causare un errore esplicito; non va ignorato
   per ripiegare sul tag di istanza o sull'inferenza legacy.
@@ -228,6 +236,22 @@ Politiche approvate:
   un errore esplicito; non si applica alcun fallback. Se il project tag manca,
   si usa il tag d'istanza più vicino o, in sua assenza, l'inferenza legacy
   approvata.
+
+## Elenco dei punti critici, indesiderati o da rettificare
+
+- **Target assoluto esterno a `$BASE`**: la ricerca dell'instance tag parte
+  dalla directory selezionata e risale i parent. Se tale directory non è
+  `$BASE` né una sua discendente, `$BASE` non verrà mai incontrata; un ciclo
+  che continui fino a esaurire i parent raggiungerebbe `/`. Potrebbe così
+  trovare un `.docker-dev/instance-tag` estraneo al perimetro del progetto e
+  usarlo per dedurre il model, con risultati inattesi e un confine di ricerca
+  troppo ampio.
+  **Da decidere prima dell'implementazione**: il resolver deve verificare la
+  discendenza da `$BASE` prima della scansione. Mitigazione raccomandata: fuori
+  da `$BASE` non cercare instance tag nei parent; accettare come fonti del model
+  soltanto il project tag della directory selezionata o un `--model` esplicito
+  e coerente, altrimenti fallire. Non proseguire mai implicitamente la ricerca
+  fino a `/`.
 
 ## 7. Impatto d'integrazione stimato
 
@@ -243,8 +267,10 @@ Non è una modifica confinata alla sola visualizzazione dei tag.
   aggiungere lettura/validazione del tag di istanza, ricerca dei parent
   limitata a `$BASE`, fallback legacy e restituzione sia del model sia della
   root dell'istanza selezionata.
-- **Build**: separare il model (selezione pipeline/template) dalla root di
-  destinazione; attualmente `ddev_resolve_build_project()` usa
+- **Build**: rendere `--model` facoltativo e dedurlo dai tag o dalla root
+  legacy; per target assoluti avviare la ricerca dell'instance tag dalla
+  directory selezionata. Separare il model (selezione pipeline/template) dalla
+  root di destinazione; attualmente `ddev_resolve_build_project()` usa
   `$BASE/<model>/<target>`, quindi non può rappresentare da solo una root
   personalizzata.
 - **Run**: integrare il model dedotto dall'istanza con il project tag e

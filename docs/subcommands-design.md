@@ -18,15 +18,15 @@ Questo documento descrive il design approvato per i requisiti concordati. Il par
 ### Comandi proposti
 
 ```text
-docker-dev build --model <model> [--target <target>] [-x] [-y]
+docker-dev build [--model <model>] [--target <target>] [-x] [-y]
 docker-dev run [--target <target>]
 ```
 
-Le forme `--model=<model>` e `--target=<target>` sono accettate insieme alle forme separate. `--model` è obbligatorio per `build`; `--lang` è mantenuto come alias legacy. Non è previsto per `run`, che ricava il modello dai metadati del progetto.
+Le forme `--model=<model>` e `--target=<target>` sono accettate insieme alle forme separate. `--model` è facoltativo per `build`; `--lang` è mantenuto come alias. Se omesso, il model viene dedotto dai metadati del progetto o dell'istanza oppure dalla root legacy gestita. Se non è deducibile, `build` fallisce esplicitamente. Non è previsto per `run`, che ricava il model dai metadati del progetto o dell'istanza.
 
 | Opzione | Comando | Comportamento |
 |---|---|---|
-| `--model <model>` | `build` | Modello obbligatorio; deve corrispondere a una directory gestita in `langs/`, `services/` o `stacks/`. |
+| `--model <model>` | `build` | Modello esplicito facoltativo; deve essere gestito e coerente con i tag applicabili. Se omesso, viene dedotto dal progetto/istanza o dalla root legacy. |
 | `--target <target>` | entrambi | Identifica il progetto. Il target relativo non contiene il modello. |
 | `-x` | `build` | Dopo il completamento positivo di setup e build, esegue anche il run. Senza `-x`, non avvia il container. |
 | `-y` | `build` | Sopprime la richiesta di conferma; non disabilita validazione o controlli. |
@@ -61,10 +61,12 @@ Nei comandi espliciti, `BASE` nella formula `$BASE/$lang/$target` indica la radi
 
 #### `build`
 
-- `--model` è obbligatorio (`--lang` resta alias).
+- `--model` è facoltativo; `--lang` resta alias. Un valore esplicito deve essere gestito e coerente con i tag applicabili.
 - Senza `--target`, il progetto è la directory corrente (`$PWD`).
 - Con un target relativo, il progetto è `$BASE/$model/$target`. Per esempio, con `--model Python --target foo/bar`, il percorso è `$BASE/Python/foo/bar`.
-- Accettare anche un target assoluto se indica una directory progetto esistente e accessibile, in coerenza con il comportamento storico. In questo caso `--model` resta obbligatorio e il tag scritto deve contenere quel modello.
+- Con un'istanza riconosciuta, il target relativo viene creato sotto la root dell'istanza; senza un'istanza, un `--model` esplicito mantiene la risoluzione canonica `$BASE/$model/$target`.
+- Accettare anche un target assoluto se indica una directory progetto esistente e accessibile. Per dedurre il model, la ricerca dei tag d'istanza parte dalla directory assoluta selezionata e normalizzata. Per target esterni a `$BASE`, non proseguire implicitamente la scansione fino a `/`; la regola di deduzione è segnalata come punto aperto in [model-instance-tagging-design.md](./model-instance-tagging-design.md). Un project tag valido o `--model` esplicito possono fornire il model; se manca ogni fonte valida, `build` fallisce.
+- Il model effettivo deriva da `--model`, se esplicito, oppure dai metadati applicabili e dalla convenzione legacy. Tag malformati o in conflitto con il model effettivo causano errore prima degli effetti collaterali.
 
 #### `run`
 
@@ -101,7 +103,8 @@ Regole di scrittura e validazione:
 - Pubblicare il nuovo file atomicamente (file temporaneo nella stessa directory e rename); un errore non deve lasciare un tag parziale.
 - Con `build -x`, il tag registra il successo della build anche se il successivo run fallisce.
 - Accettare solo una versione di schema supportata, un solo campo `model` e un modello gestito. Per compatibilità, è leggibile anche un singolo campo legacy `lang`; i due campi insieme sono invalidi. Campi obbligatori mancanti, duplicati, valori vuoti o schema sconosciuto rendono il tag non valido.
-- Per un target risolto sotto `$BASE/<model>/...`, il valore `model` del tag deve coincidere con `<model>`.
+- Un project tag esistente deve essere valido e coerente con il model effettivo; non può essere sovrascritto se malformato o in conflitto. Se manca, viene scritto atomicamente solo dopo il successo di setup e build.
+- Per un target sotto una root legacy `$BASE/<model>/...`, il model dedotto dalla root deve essere coerente con il tag del progetto. Sotto un'istanza taggata, project tag e instance tag devono riportare lo stesso model.
 - Un tag mancante o non valido non deve mai essere trattato come un successo-shaped fallback né deve provocare una build automatica da `run`.
 
 ## 3. Flussi e test
@@ -134,13 +137,13 @@ Gli script setup sono eseguiti anche da `run` perché inizializzano i volumi nec
 
 | Area | Casi minimi |
 |---|---|
-| Parsing | `build` richiede `--model`; `run` rifiuta `--model` se non previsto; opzioni mancanti/sconosciute; alias legacy `--lang`; `-x` solo per build; `-y` salta solo la conferma di build. |
+| Parsing e deduzione | `build` accetta `--model` omesso se deducibile da project tag, instance tag o root legacy; fallisce se non deducibile; `--model` esplicito deve essere gestito e coerente; `run` rifiuta `--model`; opzioni mancanti/sconosciute; alias `--lang`; `-x` solo per build; `-y` salta solo la conferma di build. |
 | Compatibilità | L'invocazione legacy non cambia comportamento durante la transizione; l'assenza di subcomando non viene confusa con `run`. |
 | Build e tag | Tag creato solo dopo build riuscita; nessun tag parziale se fallisce; tag aggiornato atomicamente; `-x` non esegue run se setup/build fallisce. |
-| Default target | `build` e `run` senza target usano `$PWD`; `run` ricava il modello dal tag. |
+| Default target e model implicito | `build` e `run` senza target usano `$PWD`; `build` e `run` deducono il model dai tag applicabili o dalla root legacy; senza una fonte valida falliscono. |
 | Target relativo | `build --model Python --target foo/bar` risolve in `$BASE/Python/foo/bar`; `run --target foo/bar` risolve esclusivamente `$PWD/foo/bar` e fallisce senza ricerca se manca. |
-| Target assoluto | Directory esistente e tag validi; directory inesistente o non accessibile; modello del tag valido. |
-| Tag | Tag mancante, schema non supportato, modello sconosciuto, campo duplicato/mancante/vuoto, mismatch tra tag e directory; progetto legacy locale senza tag sotto una root modello valida; lettura del vecchio campo `lang`. |
+| Target assoluto | Directory esistente e accessibile; la ricerca dell'instance tag parte dal target selezionato e normalizzato, non da `$PWD`; model deducibile da tag o root legacy; mismatch o fonti mancanti producono errore. |
+| Tag | Tag mancante, schema non supportato, modello sconosciuto, campo duplicato/mancante/vuoto, mismatch tra project tag, instance tag e `--model`; progetto legacy locale senza tag sotto una root modello valida; lettura del vecchio campo `lang`. |
 | Target run assente | Il target manca sotto `$PWD` ma esiste sotto un'altra root modello: errore immediato, nessuna ricerca globale e nessuna invocazione Docker. |
 | No build implicita | `run` con immagine assente fallisce e suggerisce `build`, senza invocare gli script di build o mutare lo stato. |
 | Ordine | Verificare tramite stub/mocking che `build` esegua setup prima di build e che il run eventuale venga dopo tag/build. |
