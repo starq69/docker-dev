@@ -65,7 +65,124 @@ fail() {
 
 PROJECT_BASE="${ORG}/REP/DEV"
 PROJECT_DIR="${PROJECT_BASE}/Python/basic"
+INSTANCE_DIR="${PROJECT_BASE}/python-team"
+mkdir -p "$INSTANCE_DIR"
+env ORG="$ORG" HOME="$HOME" PATH="$PATH" \
+    "$SCRIPT_DIR/docker-dev.sh" tag --model Python --target "$INSTANCE_DIR" \
+    >"${TEST_ROOT}/tag.out" 2>&1 ||
+    fail "tag command failed: $(cat "${TEST_ROOT}/tag.out")"
+[[ "$(cat "${INSTANCE_DIR}/.docker-dev/instance-tag")" == $'schema_version=1\nmodel=Python' ]] ||
+    fail "tag command wrote unexpected instance tag content"
 
+set +e
+env ORG="$ORG" HOME="$HOME" PATH="$PATH" \
+    "$SCRIPT_DIR/docker-dev.sh" tag --model Bun --target "$INSTANCE_DIR" \
+    >"${TEST_ROOT}/tag-existing.out" 2>&1
+status=$?
+set -e
+[[ "$status" -ne 0 ]] || fail "tag command silently overwrote an instance tag"
+grep -q 'instance tag already exists' "${TEST_ROOT}/tag-existing.out" ||
+    fail "existing instance tag error was not explicit"
+
+(
+    cd "$INSTANCE_DIR"
+    env ORG="$ORG" HOME="$HOME" PATH="$PATH" \
+        "$SCRIPT_DIR/docker-dev.sh" info --tag >"${TEST_ROOT}/info.out" 2>&1
+) || fail "info --tag failed: $(cat "${TEST_ROOT}/info.out")"
+grep -q 'Effective model: Python (instance-tag)' "${TEST_ROOT}/info.out" ||
+    fail "info --tag did not report the instance model"
+
+(
+    cd "$INSTANCE_DIR"
+    env ORG="$ORG" HOME="$HOME" PATH="$PATH" \
+        "$SCRIPT_DIR/docker-dev.sh" build --target inferred -y \
+        >"${TEST_ROOT}/build-inferred.out" 2>&1
+) || fail "build without --model did not infer the instance model: $(cat "${TEST_ROOT}/build-inferred.out")"
+[[ "$(cat "${INSTANCE_DIR}/inferred/.docker-dev/project-tag")" == $'schema_version=1\nmodel=Python' ]] ||
+    fail "model-inferred build did not write the expected project tag"
+
+mkdir -p "${INSTANCE_DIR}/legacy-no-project-tag"
+: > "$FAKE_LOG"
+(
+    cd "$INSTANCE_DIR"
+    printf 'Y' | env ORG="$ORG" HOME="$HOME" PATH="$PATH" \
+        "$SCRIPT_DIR/docker-dev.sh" run --target legacy-no-project-tag \
+        >"${TEST_ROOT}/run-instance-inferred.out" 2>&1
+) || fail "run did not infer the model from its enclosing instance: $(cat "${TEST_ROOT}/run-instance-inferred.out")"
+grep -q '^run ' "$FAKE_LOG" || fail "run with inferred model did not start a container"
+if grep -q '^build ' "$FAKE_LOG"; then
+    fail "run with inferred model performed a build"
+fi
+[[ ! -e "${INSTANCE_DIR}/legacy-no-project-tag/.docker-dev/project-tag" ]] ||
+    fail "run wrote a project tag for a legacy project"
+
+: > "$FAKE_LOG"
+set +e
+(
+    cd "$INSTANCE_DIR"
+    env ORG="$ORG" HOME="$HOME" PATH="$PATH" \
+        "$SCRIPT_DIR/docker-dev.sh" build --model Bun --target mismatch -y \
+        >"${TEST_ROOT}/build-mismatch.out" 2>&1
+)
+status=$?
+set -e
+[[ "$status" -ne 0 ]] || fail "build accepted a model conflicting with its instance tag"
+grep -q 'does not match instance model' "${TEST_ROOT}/build-mismatch.out" ||
+    fail "model conflict diagnostic was not explicit"
+[[ ! -s "$FAKE_LOG" ]] || fail "model conflict reached Docker before failing"
+
+mkdir -p "${INSTANCE_DIR}/project-tag-mismatch/.docker-dev" \
+    "${INSTANCE_DIR}/project-tag-malformed/.docker-dev"
+printf 'schema_version=1\nmodel=Bun\n' \
+    > "${INSTANCE_DIR}/project-tag-mismatch/.docker-dev/project-tag"
+printf 'schema_version=99\nmodel=Python\n' \
+    > "${INSTANCE_DIR}/project-tag-malformed/.docker-dev/project-tag"
+for invalid_project in project-tag-mismatch project-tag-malformed; do
+    : > "$FAKE_LOG"
+    set +e
+    (
+        cd "$INSTANCE_DIR"
+        env ORG="$ORG" HOME="$HOME" PATH="$PATH" \
+            "$SCRIPT_DIR/docker-dev.sh" build --target "$invalid_project" -y \
+            >"${TEST_ROOT}/${invalid_project}.out" 2>&1
+    )
+    status=$?
+    set -e
+    [[ "$status" -ne 0 ]] || fail "build accepted $invalid_project"
+    [[ ! -s "$FAKE_LOG" ]] || fail "build with $invalid_project reached Docker before failing"
+done
+grep -q 'does not match instance model' "${TEST_ROOT}/project-tag-mismatch.out" ||
+    fail "project tag mismatch diagnostic was not explicit"
+grep -q 'unsupported project tag schema_version' "${TEST_ROOT}/project-tag-malformed.out" ||
+    fail "malformed project tag diagnostic was not explicit"
+
+EXTERNAL_ROOT="${TEST_ROOT}/external"
+EXTERNAL_PROJECT="${EXTERNAL_ROOT}/tagged-project"
+EXTERNAL_NO_TAG="${EXTERNAL_ROOT}/untagged-project"
+mkdir -p "${EXTERNAL_ROOT}/.docker-dev" "$EXTERNAL_PROJECT/.docker-dev" "$EXTERNAL_NO_TAG"
+printf 'schema_version=1\nmodel=Bun\n' > "${EXTERNAL_ROOT}/.docker-dev/instance-tag"
+printf 'schema_version=1\nmodel=Perl\n' > "$EXTERNAL_PROJECT/.docker-dev/project-tag"
+env ORG="$ORG" HOME="$HOME" PATH="$PATH" \
+    "$SCRIPT_DIR/docker-dev.sh" build --target "$EXTERNAL_PROJECT" -y \
+    >"${TEST_ROOT}/build-external-tagged.out" 2>&1 ||
+    fail "external absolute target did not use its project tag: $(cat "${TEST_ROOT}/build-external-tagged.out")"
+grep -q 'Project Model  : Perl' "${TEST_ROOT}/build-external-tagged.out" ||
+    fail "external absolute target used its ancestor instance tag"
+
+: > "$FAKE_LOG"
+set +e
+env ORG="$ORG" HOME="$HOME" PATH="$PATH" \
+    "$SCRIPT_DIR/docker-dev.sh" build --target "$EXTERNAL_NO_TAG" -y \
+    >"${TEST_ROOT}/build-external-no-model.out" 2>&1
+status=$?
+set -e
+[[ "$status" -ne 0 ]] || fail "external target inferred a model from an ancestor instance tag"
+grep -q 'model cannot be inferred' "${TEST_ROOT}/build-external-no-model.out" ||
+    fail "external target without a project tag did not explain model inference failure"
+[[ ! -s "$FAKE_LOG" ]] || fail "external target without a model reached Docker"
+
+rm -f "${FAKE_IMAGES}/dev.python"
+: > "$FAKE_LOG"
 env ORG="$ORG" HOME="$HOME" PATH="$PATH" \
     "$SCRIPT_DIR/docker-dev.sh" build --model Python --target basic -y \
     >"${TEST_ROOT}/build.out" 2>&1 ||

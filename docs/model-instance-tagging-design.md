@@ -11,9 +11,8 @@ Le decisioni sono divise in:
 
 - **Approvato**: il design del punto 3, i nomi e le posizioni `instance-tag` e
   `project-tag`, il formato dei metadati e le politiche dei punti 5 e 6.
-- **Da confermare**: dettagli operativi del comando `tag`, in particolare la
-  risoluzione dei target relativi/assoluti e la gestione di un tag d'istanza
-  già esistente.
+- **Da confermare**: un eventuale comando esplicito per sostituire un tag
+  d'istanza già esistente; il comando `tag` corrente rifiuta la sovrascrittura.
 
 ## 1. Terminologia
 
@@ -102,12 +101,13 @@ docker-dev tag --model <model> [--target <directory>]
 ```
 
 - `--target` assente: tagga `$PWD`.
-- `--target` presente: tagga la directory specificata.
-- La directory deve esistere; `tag` non crea implicitamente un'istanza.
-- Il comando deve validare che il model sia gestito e gestire esplicitamente un
-  eventuale tag già presente, evitando sovrascritture silenziose.
-- Le regole esatte per target assoluti/relativi, overwrite e collocazione
-  ammessa sotto `$BASE` restano da definire.
+- `--target` relativo è risolto rispetto a `$PWD`; un target assoluto viene
+  normalizzato e usato direttamente.
+- La directory deve esistere, essere leggibile/scrivibile e trovarsi sotto
+  `$BASE`; `tag` non crea implicitamente un'istanza.
+- Il model deve essere gestito. Se il file `instance-tag` esiste già, il
+  comando fallisce senza sovrascriverlo; la sostituzione richiederà un'opzione
+  esplicita futura.
 
 Una volta taggata `$BASE/bun-team` come `Bun`, la directory può contenere più
 progetti senza che il suo nome debba essere `Bun`.

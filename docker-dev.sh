@@ -398,6 +398,87 @@ ddev_set_explicit_project_identity() {
     CONTAINER_NAME="${IMAGE_NAME}.${P_NAME}"
 }
 
+  ddev_run_tag_command() {
+    local project_base
+    local target_dir
+
+    ORG="${ORG:-$HOME}"
+    BASE="$(readlink -m -- "${ORG}/REP")"
+    project_base="$(readlink -m -- "${BASE}/DEV")"
+
+    if [[ -z "$DDEV_TARGET" ]]; then
+      target_dir="$(readlink -m -- "$PWD")"
+    elif [[ "$DDEV_TARGET" == /* ]]; then
+      target_dir="$(readlink -m -- "$DDEV_TARGET")"
+    else
+      if ! ddev_cli_validate_relative_target "$DDEV_TARGET"; then
+        echo "[tag] ERROR: $DDEV_RESOLVE_ERROR" >&2
+        return 2
+      fi
+      target_dir="$(readlink -m -- "${PWD}/${DDEV_TARGET}")"
+    fi
+
+    if [[ ! -d "$target_dir" || ! -r "$target_dir" || ! -w "$target_dir" ]]; then
+      echo "[tag] ERROR: target must be an existing readable and writable directory: $target_dir" >&2
+      return 1
+    fi
+    if ! ddev_path_is_within "$target_dir" "$project_base"; then
+      echo "[tag] ERROR: instance directory must be under project base: $project_base" >&2
+      return 1
+    fi
+    if ! ddev_write_instance_tag "$target_dir" "$DDEV_MODEL" "$SCRIPT_DIR"; then
+      echo "[tag] ERROR: $DDEV_RESOLVE_ERROR" >&2
+      return 1
+    fi
+
+    printf '[tag] Instance model %s recorded in %s/.docker-dev/instance-tag\n' \
+      "$DDEV_MODEL" "$target_dir"
+  }
+
+  ddev_run_info_command() {
+    local project_base
+    local project_dir
+    local project_tag_file
+    local project_model="absent"
+
+    ORG="${ORG:-$HOME}"
+    BASE="$(readlink -m -- "${ORG}/REP")"
+    project_base="$(readlink -m -- "${BASE}/DEV")"
+    project_dir="$(readlink -m -- "$PWD")"
+    project_tag_file="${project_dir}/.docker-dev/project-tag"
+
+    printf 'Project directory: %s\n' "$project_dir"
+    if [[ -e "$project_tag_file" || -L "$project_tag_file" ]]; then
+      if ! ddev_read_project_tag "$project_dir" "$SCRIPT_DIR"; then
+        printf 'Project tag: invalid (%s)\n' "$DDEV_RESOLVE_ERROR" >&2
+        return 1
+      fi
+      project_model="$DDEV_TAG_MODEL"
+      printf 'Project tag: %s (%s)\n' "$project_model" "$project_tag_file"
+    else
+      printf 'Project tag: absent\n'
+    fi
+
+    if ! ddev_resolve_instance_context "$SCRIPT_DIR" "$project_base" "$project_dir"; then
+      printf 'Instance tag: invalid (%s)\n' "$DDEV_RESOLVE_ERROR" >&2
+      return 1
+    fi
+    if [[ "$DDEV_INSTANCE_SOURCE" == instance-tag ]]; then
+      printf 'Instance tag: %s (%s/.docker-dev/instance-tag)\n' \
+        "$DDEV_INSTANCE_MODEL" "$DDEV_INSTANCE_DIR"
+    elif [[ "$DDEV_INSTANCE_SOURCE" == legacy-root ]]; then
+      printf 'Instance tag: absent; legacy model root: %s\n' "$DDEV_INSTANCE_MODEL"
+    else
+      printf 'Instance tag: absent\n'
+    fi
+
+    if ! ddev_resolve_project_model "$SCRIPT_DIR" "$project_base" "$project_dir" "" 1; then
+      printf 'Effective model: unavailable (%s)\n' "$DDEV_RESOLVE_ERROR" >&2
+      return 1
+    fi
+    printf 'Effective model: %s (%s)\n' "$DDEV_PROJECT_MODEL" "$DDEV_MODEL_SOURCE"
+  }
+
 ddev_run_explicit_command() {
     local operation="$DDEV_OPERATION"
     local project_base
@@ -409,10 +490,6 @@ ddev_run_explicit_command() {
     project_base="${BASE}/DEV"
 
     if [[ "$operation" == build ]]; then
-        if ! ddev_cli_is_managed_model "$SCRIPT_DIR" "$DDEV_MODEL"; then
-            echo "[build] ERROR: $DDEV_RESOLVE_ERROR" >&2
-            return 2
-        fi
         if [[ -n "$DDEV_TARGET" && "$DDEV_TARGET" != /* ]]; then
             if ! ddev_cli_validate_relative_target "$DDEV_TARGET"; then
                 echo "[build] ERROR: $DDEV_RESOLVE_ERROR" >&2
@@ -523,6 +600,8 @@ if ! ddev_cli_parse "$@"; then
     case "$DDEV_OPERATION" in
         build) ddev_cli_build_usage >&2 ;;
         run) ddev_cli_run_usage >&2 ;;
+        tag) ddev_cli_tag_usage >&2 ;;
+        info) ddev_cli_info_usage >&2 ;;
         *) ddev_cli_usage >&2 ;;
     esac
     exit 2
@@ -533,9 +612,22 @@ if [[ "$DDEV_OPERATION" != legacy ]]; then
         case "$DDEV_OPERATION" in
             build) ddev_cli_build_usage ;;
             run) ddev_cli_run_usage ;;
+          tag) ddev_cli_tag_usage ;;
+          info) ddev_cli_info_usage ;;
         esac
         exit 0
     fi
+
+      case "$DDEV_OPERATION" in
+        tag)
+          ddev_run_tag_command || exit $?
+          exit 0
+          ;;
+        info)
+          ddev_run_info_command || exit $?
+          exit 0
+          ;;
+      esac
 
     ddev_run_explicit_command || exit $?
     exit 0

@@ -8,8 +8,10 @@ percorso dello script.
 ## Comandi
 
 ```text
-docker-dev build --model <model> [--target <target>] [-x] [-y]
+docker-dev build [--model <model>] [--target <target>] [-x] [-y]
 docker-dev run [--target <target>]
+docker-dev tag --model <model> [--target <directory>]
+docker-dev info --tag
 ```
 
 Le opzioni lunghe possono essere passate sia separate sia con `=`:
@@ -19,10 +21,12 @@ docker-dev build --model Bun --target foo
 docker-dev build --model=Bun --target=foo
 ```
 
-Il modello deve corrispondere a una directory gestita sotto `langs/`,
+Un model esplicito deve corrispondere a una directory gestita sotto `langs/`,
 `services/` o `stacks/`. Il valore è sensibile alle maiuscole e minuscole;
 il nome deve essere univoco fra queste root. `--lang` resta disponibile come
-alias compatibile per `--model`.
+alias compatibile per `--model` in `build`. Se omesso, `build` deduce il model
+dal project tag, dall'instance tag o dalla root legacy. Se non è deducibile,
+fallisce esplicitamente.
 
 ## Build
 
@@ -32,6 +36,10 @@ solo se questi terminano correttamente, scrive il tag del progetto.
 ```bash
 # Crea o aggiorna il progetto in $ORG/REP/DEV/Bun/foo
 docker-dev build --model Bun --target foo
+
+# Dalla root di un'istanza taggata, deduce il model e crea foo sotto l'istanza
+cd "$HOME/REP/DEV/bun-team"
+docker-dev build --target foo
 
 # Usa la directory corrente come progetto
 docker-dev build --model Bun
@@ -44,7 +52,8 @@ docker-dev build --model Bun --target foo -x
 docker-dev build --model Bun --target foo -y
 ```
 
-- `--model` è obbligatorio.
+- `--model` è facoltativo. Se specificato, deve essere gestito e coerente con
+  i tag applicabili.
 - Senza `--target`, il progetto è `$PWD`, che deve già esistere ed essere
   accessibile in lettura e scrittura.
 - Un target relativo, per esempio `foo/bar`, non include il modello e viene
@@ -52,6 +61,12 @@ docker-dev build --model Bun --target foo -y
 - Il valore predefinito di `ORG` è `$HOME`; quindi il percorso predefinito è,
   per esempio, `$HOME/REP/DEV/Bun/foo`.
 - Un target assoluto deve indicare una directory già esistente e accessibile.
+- Se il target assoluto è dentro `$BASE`, la ricerca dell'instance tag parte
+  dalla directory selezionata e risale fino a `$BASE`. Se è esterno a `$BASE`,
+  non vengono cercati tag nei parent: il model deve provenire da `--model` o
+  dal project tag della directory selezionata.
+- Un project tag malformato o in conflitto con il model effettivo causa errore
+  prima di applicare template o avviare setup/build; non viene sovrascritto.
 - `-x` aggiunge il run dopo il successo di setup e build. Se la build fallisce,
   il container non viene avviato e il tag non viene scritto.
 - `-y` salta il prompt di conferma di `build`; non disabilita validazioni o
@@ -124,6 +139,26 @@ termina con un errore esplicito. Per un progetto legacy senza tag, eseguire
 `run --target <progetto>` dalla directory radice del modello, per esempio
 `$HOME/REP/DEV/Bun`.
 
+## Tag dell'istanza
+
+Un instance tag associa una directory esistente sotto `$BASE` a un model e
+consente di dedurre il model per i progetti contenuti.
+
+```bash
+docker-dev tag --model Bun --target "$HOME/REP/DEV/bun-team"
+```
+
+Senza `--target`, viene taggata la directory corrente. Un target relativo è
+risolto da `$PWD`; un target assoluto viene normalizzato. La directory deve
+esistere ed essere leggibile/scrivibile. Il comando rifiuta di sovrascrivere un
+`instance-tag` già presente.
+
+## Diagnostica tag
+
+`docker-dev info --tag` mostra il project tag corrente, il contesto d'istanza
+più vicino entro `$BASE` e il model effettivo con la relativa origine. Segnala
+tag malformati o conflitti senza applicare fallback.
+
 ## Sintassi legacy
 
 Le invocazioni senza subcomando sono ancora supportate e mantengono il flusso
@@ -144,7 +179,7 @@ avviso di deprecazione.
 
 | Messaggio/situazione | Causa e azione |
 |---|---|
-| `build requires --model` | Specificare un modello gestito, per esempio `--model Bun`. |
+| `model cannot be inferred` | Specificare `--model`, creare un instance tag o eseguire il comando sotto una root legacy gestita; per un target assoluto esterno a `$BASE`, usare il project tag della directory o `--model`. |
 | `unknown or unmanaged model` | Il valore di `--model` non corrisponde a una directory sotto `langs/`, `services/` o `stacks/`; verificare anche maiuscole e minuscole. |
 | `target ... does not exist under the current directory` | Il target relativo di `run` non è un figlio di `$PWD`; spostarsi nella directory genitore corretta oppure usare un percorso assoluto. |
 | `project metadata directory is missing or invalid` / tag mancante o non leggibile | Eseguire una build riuscita oppure, per un progetto legacy senza tag, usare `run --target` dalla sua root modello. |

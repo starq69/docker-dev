@@ -70,6 +70,45 @@ assert_success ddev_read_project_tag "${PROJECT_BASE}/Python/absolute" "$PROJECT
 [[ "$(cat "${PROJECT_BASE}/Python/absolute/.docker-dev/project-tag")" == $'schema_version=1\nmodel=Python' ]] ||
     fail "tag file has unexpected content"
 
+INSTANCE_ROOT="${PROJECT_BASE}/bun-team"
+mkdir -p "$INSTANCE_ROOT"
+assert_success ddev_write_instance_tag "$INSTANCE_ROOT" Bun "$PROJECT_TOOL_ROOT"
+assert_success ddev_read_instance_tag "$INSTANCE_ROOT" "$PROJECT_TOOL_ROOT"
+[[ "$DDEV_TAG_MODEL" == Bun ]] || fail "instance tag did not round-trip"
+[[ "$(cat "${INSTANCE_ROOT}/.docker-dev/instance-tag")" == $'schema_version=1\nmodel=Bun' ]] ||
+    fail "instance tag has unexpected content"
+assert_failure_contains "instance tag already exists" \
+    ddev_write_instance_tag "$INSTANCE_ROOT" Bun "$PROJECT_TOOL_ROOT"
+
+previous_directory="$PWD"
+cd "$INSTANCE_ROOT"
+assert_success ddev_resolve_build_project "$PROJECT_TOOL_ROOT" "$PROJECT_BASE" "" apps/hello
+[[ "$DDEV_PROJECT_DIR" == "${INSTANCE_ROOT}/apps/hello" && "$DDEV_PROJECT_MODEL" == Bun ]] ||
+    fail "build did not infer model/root from instance tag"
+assert_failure_contains "explicit model 'Python' does not match instance model 'Bun'" \
+    ddev_resolve_build_project "$PROJECT_TOOL_ROOT" "$PROJECT_BASE" Python apps/mismatch
+mkdir -p "${INSTANCE_ROOT}/absolute"
+assert_success ddev_resolve_build_project \
+    "$PROJECT_TOOL_ROOT" "$PROJECT_BASE" "" "${INSTANCE_ROOT}/absolute"
+[[ "$DDEV_PROJECT_MODEL" == Bun ]] || fail "absolute target did not infer enclosing instance model"
+cd "$previous_directory"
+
+EXTERNAL_ROOT="${TEST_ROOT}/outside"
+EXTERNAL_PROJECT="${EXTERNAL_ROOT}/tagged-project"
+EXTERNAL_NO_TAG="${EXTERNAL_ROOT}/untagged-project"
+mkdir -p "$EXTERNAL_ROOT" "$EXTERNAL_PROJECT" "$EXTERNAL_NO_TAG"
+assert_success ddev_write_instance_tag "$EXTERNAL_ROOT" Bun "$PROJECT_TOOL_ROOT"
+assert_success ddev_write_project_tag "$EXTERNAL_PROJECT" Postgres "$PROJECT_TOOL_ROOT"
+assert_success ddev_resolve_build_project \
+    "$PROJECT_TOOL_ROOT" "$PROJECT_BASE" "" "$EXTERNAL_PROJECT"
+[[ "$DDEV_PROJECT_MODEL" == Postgres ]] ||
+    fail "external absolute target used an ancestor instance tag instead of its project tag"
+assert_failure_contains "model cannot be inferred" \
+    ddev_resolve_build_project "$PROJECT_TOOL_ROOT" "$PROJECT_BASE" "" "$EXTERNAL_NO_TAG"
+assert_success ddev_resolve_build_project \
+    "$PROJECT_TOOL_ROOT" "$PROJECT_BASE" Bun "$EXTERNAL_NO_TAG"
+[[ "$DDEV_PROJECT_MODEL" == Bun ]] || fail "explicit model did not resolve an external absolute target"
+
 # Existing project tags using lang= remain readable.
 mkdir -p "${PROJECT_BASE}/Perl/legacy-tag/.docker-dev"
 printf 'schema_version=1\nlang=Perl\n' > "${PROJECT_BASE}/Perl/legacy-tag/.docker-dev/project-tag"

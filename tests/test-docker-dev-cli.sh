@@ -32,19 +32,25 @@ assert_parse() {
 }
 
 assert_parse 0 legacy "" "" 0 0 --target=Python/foo -i custom
+assert_parse 0 build "" foo/bar 0 0 build --target foo/bar
 assert_parse 0 build Python foo/bar 1 1 build --model Python --target foo/bar -x -y
 assert_parse 0 build Python foo/bar 0 0 build --model=Python --target=foo/bar
 assert_parse 0 build Perl "" 0 0 build --lang Perl
 assert_parse 0 run "" foo/bar 0 0 run --target foo/bar
 assert_parse 0 run "" "" 0 0 run
 assert_parse 0 build "" "" 0 0 build --help
+assert_parse 0 tag Bun instance-dir 0 0 tag --model Bun --target instance-dir
+assert_parse 0 tag Bun "" 0 0 tag --model=Bun
+assert_parse 0 info "" "" 0 0 info --tag
+[[ "$DDEV_INFO_TAG" -eq 1 ]] || { printf 'FAIL: info --tag was not parsed\n' >&2; exit 1; }
 
-assert_parse 2 build "" "" 0 0 build
-[[ "$DDEV_PARSE_ERROR" == "build requires --model" ]]
 assert_parse 2 build Python "" 0 0 build --model Python --lang Perl
 assert_parse 2 build Python "" 0 0 build --model Python --x
 assert_parse 2 run "" "" 0 0 run --model Python
 assert_parse 2 run "" "" 0 0 run -x
 assert_parse 2 build Python "" 0 0 build --model Python --target=
+assert_parse 2 tag "" "" 0 0 tag
+assert_parse 2 info "" "" 0 0 info
+assert_parse 2 info "" "" 0 0 info --tag --target foo
 
 printf 'docker-dev CLI parser tests passed\n'
