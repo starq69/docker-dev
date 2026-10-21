@@ -31,7 +31,9 @@ assert_parse() {
     fi
 }
 
-assert_parse 0 legacy "" "" 0 0 --target=Python/foo -i custom
+assert_parse 2 "" "" "" 0 0
+assert_parse 2 "" "" "" 0 0 --target=Python/foo
+assert_parse 2 "" "" "" 0 0 --penv=QA
 assert_parse 0 build "" foo/bar 0 0 build --target foo/bar
 assert_parse 0 build Python foo/bar 1 1 build --model Python --target foo/bar -x -y
 assert_parse 0 build Python foo/bar 0 0 build --model=Python --target=foo/bar
@@ -46,6 +48,7 @@ assert_parse 0 info "" "" 0 0 info --tag
 
 assert_parse 2 build Python "" 0 0 build --model Python --lang Perl
 assert_parse 2 build Python "" 0 0 build --model Python --x
+assert_parse 2 build "" "" 0 0 build --penv QA
 assert_parse 2 run "" "" 0 0 run --model Python
 assert_parse 2 run "" "" 0 0 run -x
 assert_parse 2 build Python "" 0 0 build --model Python --target=

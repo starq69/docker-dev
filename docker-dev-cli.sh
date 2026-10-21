@@ -11,14 +11,18 @@ Usage:
 Commands:
   build  Prepare and build a project; -x also requests a run.
   run    Run a project without an implicit build.
+  tag    Record the model for an instance directory.
+  info   Show project and instance tag diagnostics.
 
 Options:
     --model <model>   Optional for build; required by tag. Must be managed.
-  --lang <lang>     Legacy alias for --model.
+  --lang <lang>      Alias for --model in build.
   --target <target> Project target.
   -x                Also run after build.
   -y                Skip the build confirmation prompt.
   -h, --help        Show this help.
+
+Specify a command explicitly. Projects are rooted under $ORG/REP/DEV.
 USAGE
 }
 
@@ -47,7 +51,7 @@ USAGE
 }
 
 ddev_cli_parse() {
-    DDEV_OPERATION=legacy
+    DDEV_OPERATION=""
     DDEV_MODEL=""
     DDEV_TARGET=""
     DDEV_BUILD_AND_RUN=0
@@ -61,8 +65,17 @@ ddev_cli_parse() {
             DDEV_OPERATION="$1"
             shift
             ;;
-        *)
+        -h|--help)
+            DDEV_SHOW_HELP=1
             return 0
+            ;;
+        "")
+            DDEV_PARSE_ERROR="a command is required"
+            return 2
+            ;;
+        *)
+            DDEV_PARSE_ERROR="unknown command: $1"
+            return 2
             ;;
     esac
 

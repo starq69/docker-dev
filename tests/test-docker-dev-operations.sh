@@ -303,12 +303,27 @@ fi
 ) || fail "run without --target did not use tagged current directory: $(cat "${TEST_ROOT}/run-pwd.out")"
 
 : > "$FAKE_LOG"
-printf 'Y' | env ORG="$ORG" HOME="$HOME" PATH="$PATH" \
+set +e
+env ORG="$ORG" HOME="$HOME" PATH="$PATH" \
     "$SCRIPT_DIR/docker-dev.sh" "--target=${PROJECT_DIR}" \
-    >"${TEST_ROOT}/legacy.out" 2>&1 ||
-    fail "legacy invocation failed: $(cat "${TEST_ROOT}/legacy.out")"
-grep -q '^run ' "$FAKE_LOG" || fail "legacy invocation no longer ran the full pipeline"
-grep -q 'Image dev.python already exists' "${TEST_ROOT}/legacy.out" ||
-    fail "legacy invocation did not preserve its image reuse behavior"
+    >"${TEST_ROOT}/removed-legacy-invocation.out" 2>&1
+status=$?
+set -e
+[[ "$status" -ne 0 ]] || fail "legacy invocation without a subcommand was accepted"
+grep -q 'unknown command' "${TEST_ROOT}/removed-legacy-invocation.out" ||
+    fail "invocation without a subcommand did not report the command error"
+[[ ! -s "$FAKE_LOG" ]] || fail "legacy invocation contacted Docker"
+
+: > "$FAKE_LOG"
+set +e
+env ORG="$ORG" HOME="$HOME" PATH="$PATH" \
+    "$SCRIPT_DIR/docker-dev.sh" build --model Python --target "$PROJECT_DIR" --penv QA \
+    >"${TEST_ROOT}/removed-penv.out" 2>&1
+status=$?
+set -e
+[[ "$status" -ne 0 ]] || fail "--penv was accepted by build"
+grep -q 'unknown argument for build: --penv' "${TEST_ROOT}/removed-penv.out" ||
+    fail "removed --penv did not report an explicit parser error"
+[[ ! -s "$FAKE_LOG" ]] || fail "build with removed --penv contacted Docker"
 
 printf 'docker-dev operation integration tests passed\n'

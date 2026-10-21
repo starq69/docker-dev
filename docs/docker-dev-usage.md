@@ -25,8 +25,8 @@ Un model esplicito deve corrispondere a una directory gestita sotto `langs/`,
 `services/` o `stacks/`. Il valore è sensibile alle maiuscole e minuscole;
 il nome deve essere univoco fra queste root. `--lang` resta disponibile come
 alias compatibile per `--model` in `build`. Se omesso, `build` deduce il model
-dal project tag, dall'instance tag o dalla root legacy. Se non è deducibile,
-fallisce esplicitamente.
+dal project tag, dall'instance tag o dalla root del modello gestita. Se non è
+deducibile, fallisce esplicitamente.
 
 ## Build
 
@@ -135,8 +135,9 @@ dopo il successo degli step di setup e build; se `build -x` completa la build ma
 il run successivo fallisce, il tag resta valido perché la build è riuscita.
 
 Se il tag è mancante o non valido, `run` su `$PWD` o su un target assoluto
-termina con un errore esplicito. Per un progetto legacy senza tag, eseguire
-`run --target <progetto>` dalla directory radice del modello, per esempio
+termina con un errore esplicito. Per un progetto esistente senza tag sotto una
+root modello gestita, eseguire `run --target <progetto>` dalla directory
+radice del modello, per esempio
 `$HOME/REP/DEV/Bun`.
 
 ## Tag dell'istanza
@@ -159,21 +160,19 @@ esistere ed essere leggibile/scrivibile. Il comando rifiuta di sovrascrivere un
 più vicino entro `$BASE` e il model effettivo con la relativa origine. Segnala
 tag malformati o conflitti senza applicare fallback.
 
-## Sintassi legacy
+## Sintassi CLI rimossa
 
-Le invocazioni senza subcomando sono ancora supportate e mantengono il flusso
-legacy completo (setup, build condizionale e run), con il formato target storico
-che include il linguaggio:
+È necessario specificare un subcomando (`build`, `run`, `tag` o `info`):
+le invocazioni senza subcomando e le relative opzioni storiche non sono
+supportate. In particolare, `--penv` non è più accettato. Tutti i comandi
+operano sotto `$ORG/REP/DEV` (con `$ORG` predefinito a `$HOME`); per usare
+progetti prima collocati in un altro ambiente, spostarli nella struttura
+`DEV/<model>/<progetto>` e usare i subcomandi moderni. Per esempio:
 
 ```bash
-docker-dev --target=Bun/foo
+docker-dev build --model Bun --target foo
+docker-dev run --target "$HOME/REP/DEV/Bun/foo"
 ```
-
-Questa forma non equivale al nuovo `run`: per avviare esplicitamente un progetto
-senza build implicita usare `docker-dev run`. La sintassi legacy conserva anche
-le opzioni documentate dal suo usage (`--penv`, `-i`, `-o` e gli argomenti
-inoltrati al container). Al momento il percorso legacy non mostra ancora un
-avviso di deprecazione.
 
 ## Errori comuni
 
@@ -182,7 +181,7 @@ avviso di deprecazione.
 | `model cannot be inferred` | Specificare `--model`, creare un instance tag o eseguire il comando sotto una root legacy gestita; per un target assoluto esterno a `$BASE`, usare il project tag della directory o `--model`. |
 | `unknown or unmanaged model` | Il valore di `--model` non corrisponde a una directory sotto `langs/`, `services/` o `stacks/`; verificare anche maiuscole e minuscole. |
 | `target ... does not exist under the current directory` | Il target relativo di `run` non è un figlio di `$PWD`; spostarsi nella directory genitore corretta oppure usare un percorso assoluto. |
-| `project metadata directory is missing or invalid` / tag mancante o non leggibile | Eseguire una build riuscita oppure, per un progetto legacy senza tag, usare `run --target` dalla sua root modello. |
+| `project metadata directory is missing or invalid` / tag mancante o non leggibile | Eseguire una build riuscita oppure, per un progetto senza tag, usare `run --target` dalla sua root modello gestita. |
 | `unsupported project tag schema_version` / tag non valido | Correggere o rigenerare il tag con una build riuscita. |
 | `image ... is not available locally` | Eseguire prima `docker-dev build --model <model> --target <progetto>`. |
 | `... is only valid with build` | Spostare l'opzione build-only (`--model`, `-x` o `-y`) sul comando `build`. |
